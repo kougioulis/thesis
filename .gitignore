@@ -5,6 +5,7 @@
 *.bbl
 *.blg
 *.dvi
+*.def
 *.glg
 *.gls
 *.glsdefs
