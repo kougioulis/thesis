@@ -1,0 +1,128 @@
+\documentclass[a4paper,10pt,twoside,openright]{book}
+
+\usepackage{libtex/algo}
+\usepackage{libtex/thesisStyle}
+\usepackage{graphicx, amssymb, amsmath, url, color, xcolor, booktabs, subfig, makeidx, tikz}
+\usetikzlibrary{3d, positioning} 
+\usetikzlibrary{shapes, arrows.meta, matrix, calc, decorations.pathreplacing, positioning, quotes} %ext.paths.ortho
+\usetikzlibrary{positioning,fit,backgrounds,shadows}
+\usetikzlibrary{shapes.multipart, decorations.pathmorphing}
+
+\tikzset{>=latex} % for LaTeX arrow head
+\colorlet{myred}{red!80!black}
+\colorlet{myblue}{blue!80!black}
+\colorlet{mygreen}{green!60!black}
+\colorlet{mydarkred}{myred!40!black}
+\colorlet{mydarkblue}{myblue!40!black}
+\colorlet{mydarkgreen}{mygreen!40!black}
+\tikzstyle{node}=[very thick,circle,draw=myblue,minimum size=22,inner sep=0.5,outer sep=0.6]
+\tikzstyle{connect}=[->,thick,mydarkblue,shorten >=1]
+\tikzset{ % node styles, numbered for easy mapping with \nstyle
+  node 1/.style={node,mydarkgreen,draw=mygreen,fill=mygreen!25},
+  node 2/.style={node,mydarkblue,draw=myblue,fill=myblue!20},
+  node 3/.style={node,mydarkred,draw=myred,fill=myred!20},
+}
+\def\nstyle{int(\lay<\Nnodlen?min(2,\lay):3)} % map layer number onto 1, 2, or 3
+
+\tikzset{
+  level/.style={rectangle, draw=black, thick, minimum height=1cm, minimum width=5.5cm, align=center},
+  arrow/.style={->, thick},
+  labelbox/.style={rectangle, draw=none, align=left}
+}
+
+\usepackage[greek,english]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage{pdfpages} % for \includepdf
+\usepackage{caption}
+\usepackage{lipsum} % for dummy text
+\usepackage{multirow}
+\usepackage{color} % colored links
+\usepackage{hyperref} % for hyperlinks
+\definecolor{deepblue}{RGB}{0,0,35} % quite a deep blue color
+
+\hypersetup{
+    colorlinks=true,
+    linktoc=all,
+    linkcolor=deepblue, % color of internal links
+    citecolor=deepblue, % color of citations
+    urlcolor=deepblue,  % color of URLs
+}
+\usepackage{algorithm}
+\usepackage{algorithmic} % maybe use \usepackage{algpseudocode} sometime?
+\usepackage{etoolbox} % for \ifnumcomp
+\usepackage{listofitems} % for \readlist to create arrays
+\usepackage{bbding}
+\captionsetup{compatibility=false}
+
+\usepackage{multicol} % for the multicol environment
+\usepackage{bookmark}
+
+\usepackage{natbib}
+\bibliographystyle{plainnat}
+
+% Title Page
+\newcommand{\thesistitle}{Large Causal Models for AIOps}
+%\newcommand{\thesistitlegreek}{}
+\newcommand{\owner}{Nikolaos Kougioulis}
+\newcommand{\firstprof}{Ioannis Tsamardinos}
+\newcommand{\secondprof}{Sofia Triantafillou}
+\newcommand{\thirdprof}{Professor 3}
+\newcommand{\csdchair}{Professor 4}
+\newcommand{\thesisdate}{\today}
+
+\newtheorem{definition}{Definition}
+
+\makeindex
+
+\input{libtex/procs} % Procedural settings
+\input{libtex/alias} % Alias and shorthand commands
+
+\long\def\symbolfootnote[#1]#2
+{\begingroup
+	\def\thefootnote{\fnsymbol{footnote}}\footnote[#1]{#2}
+	\endgroup}
+
+\newcommand{\workperformedat}{\symbolfootnote[0]{This work has been performed at the University of Crete, School of Sciences and Engineering, Computer Science Department.}}
+\newcommand{\worksupportedby}{\symbolfootnote[0]{The work has been supported by the Foundation for Research and Technology - Hellas (FORTH).}}
+
+\makeatletter
+\renewcommand{\@chapapp}{}% Not necessary...
+\newenvironment{chapquote}[2][2em]
+  {\setlength{\@tempdima}{#1}%
+   \def\chapquote@author{#2}%
+   \parshape 1 \@tempdima \dimexpr\textwidth-2\@tempdima\relax%
+   \itshape}
+  {\par\normalfont\hfill--\ \chapquote@author\hspace*{\@tempdima}\par\bigskip}
+\makeatother
+
+\begin{document}
+	
+	\input{chapters/extras/titlepage}
+	\input{chapters/extras/approvalpage}
+	\input{chapters/abstract/abstract}
+	%\input{chapters/abstract/abstract_greek}
+	
+	\tableofcontents
+	\listoftables
+	\listoffigures
+
+	%\input{chapters/preface/preface}
+	%\input{chapters/introduction/introduction}
+	%\input{chapters/background/causality/causality}
+	%\input{chapters/data/data}
+	%\input{chapters/architecture/architecture}
+	%\input{chapters/training/training}
+	%\input{chapters/results/results}
+	%\input{chapters/conclusion/conclusion}
+
+	\cleardoublepage
+	\addcontentsline{toc}{chapter}{Bibliography}
+
+	\nocite*{} % keep for now, remove later
+	\bibliography{bibliography/thesis.bib}
+		
+	% Generate index (optional, if I'm using \makeindex)
+	\cleardoublepage
+	\printindex
+	
+\end{document}
