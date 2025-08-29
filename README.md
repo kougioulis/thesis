@@ -1,0 +1,3 @@
+This repository contains the LaTeX source code of my MSc Thesis, advised by Professor Ioannis Tsamardinos at the MensXMachina Lab of the Computer Science Department at the University of Crete and the Insitute of Applied & Computational Mathematics (IACM) at Foundation for Research & Technology Hellas (FORTH). 
+
+We provide a Makefile for compiling the whole document. Run `make`on the root directory to build the code into `thesis.pdf`. Make sure to have `bibtex` and `pdflatex` installed locally.
