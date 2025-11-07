@@ -556,7 +556,7 @@ A \textit{large causal model (LCM)} is a parametric function \(f_\theta\) mappin
 \mathbf{X} \xrightarrow{f_\theta} \hat{\mathbb{A}},
 \end{equation}
 
-where \(\hat{\mathbb{A}} \in [0,1]^{k \times k \times \ell_{\max}}\). Each entry \(\mathbb{A}_{j,i,\ell_{\max}-\ell}\) represents the model's confidence in the directed causal relationship \(X^i_{t-\ell} \to X^j_t\). The maximum lag \(\ell_{\max}\) is a fixed hyperparameter bounding temporal dependencies, analogous to assumptions in classical methods such as PCMCI \citep{runge2018causal}.
+where \(\hat{\mathbb{A}} \in [0,1]^{k \times k \times \ell_{\max}}\). Each entry \(\hat{\mathbb{A}}_{j,i,\ell_{\max}-\ell}\) represents the model's confidence in the directed causal relationship \(X^i_{t-\ell} \to X^j_t\). The maximum lag \(\ell_{\max}\) is a fixed hyperparameter bounding temporal dependencies, analogous to assumptions in classical methods such as PCMCI \citep{runge2018causal}.
 %\end{definition}
 
 Unlike large language models or time-series forecasting foundation models that rely on self-supervision, causal discovery \textit{lacks natural self-supervised signals}. The ground-truth causal structure cannot be inferred from data alone, as it is fundamentally unidentifiable without external assumptions or supervision. Therefore, training follows a \textit{supervised learning scheme}, where pairs of ground truth lagged causal graphs and corresponding time-series samples are provided, generated from a known TSCM. This is illustrated in Figure \ref{fig:lagged-tensor-example}. 
