@@ -1,0 +1,82 @@
+\section{Related Work} \label{sec:related-work}
+
+This section provides an overview of recent work connecting causality with deep learning, focusing particularly on attention-based and foundation-model approaches. We highlight methods not only on causal discovery but also on causal inference, as they provide valuable insights for our own work. 
+
+\subsection{Causal Inference with Attention}
+
+The integration of causal inference into deep learning models remains relatively nascent. One notable effort is \textit{Causal Inference with Attention (CIvA)} by \citet{zhang2023towards}, which introduces a self-supervised transformer-based architecture for estimating Average Treatment Effects (ATEs) from observational data. Their approach leverages a primal-dual link between covariate balancing and self-attention, enabling the model to generalize under moderate shifts in causal mechanisms. While effective for ATE estimation, CInA is not designed for causal graph discovery and does not address temporal data.
+
+\subsection{Do-PFN}
+
+A very recent advancement in causal inference is \textit{Do--PFN} by \citet{robertson2025do}, which adapts Prior-data Fitted Networks (PFNs) for causal effect estimation. Rather than discovering the causal structure, Do--PFN focuses on learning to predict interventional outcomes (i.e., conditional interventional distributions, or CIDs) directly from observational data. The model is pre-trained on millions of synthetic datasets derived from randomly sampled SCMs, learning a meta-model capable of in-context causal inference without requiring knowledge of the ground-truth causal graph. While Do-PFN demonstrates impressive performance in both synthetic and semi-real evaluations, including frontdoor and backdoor adjustment cases, it is limited to point estimation tasks such as CID or CATE prediction. Importantly, Do--PFN does not attempt to recover or represent the underlying causal graph or temporal dynamics, which makes it orthogonal to our objective of structure discovery. Moreover, Do-PFN operates on i.i.d. tabular data and does not consider multivariate time-series or lagged causal dependencies. It also scales to graphs up to 10 nodes an degrades with noise, yet improves with dataset size. Do--PFN uses an explicit prior over SCMs and amortizes inference across them. It also captures uncertainty due to unidentifiability, i.e., integrating over model priors.
+
+\subsection{Sample, Estimate, Aggregate}
+
+In the causal discovery domain, \citet{wu2024sample} propose a method that aggregates subgraph-level causal estimates using axial attention alongside global statistical features such as inverse covariance. Although innovative, their method is limited to static (i.i.d.) data and does not extend to time-series or interventional settings. 
+
+\subsection{CSIvA}
+
+Similarly, \citet{ke2023learning} (with \textit{Causal Structure Induction via Attention - CSIvA}), treat causal discovery as a supervised learning task using an autoregressive Transformer decoder with alternating attention, but their framework also targets non-temporal data only and is trained on synthetic SCMs.
+
+\subsection{Causal Pretraining}
+
+\begin{figure}[ht!]
+    \centering
+    \includegraphics[width=0.65\textwidth]{images/stein_auc2.png}
+    \caption{Illustration of the performance of \citet{stein2024embracing} models on the AUC-ROC metric, as a function of input dimensionality and model size. As input dimensionality and model size increase, introduced models show diminishing performance. Model sizes in the legend are defined as in \citet{stein2024embracing}, i.e. from \texttt{12.3K} to over \texttt{391M} parameters, corresponding to observational input dimensions of \(5\) variables and \(3\) lags. Figure adapted from \citet[Figure 3]{stein2024embracing}.}
+    \label{fig:stein_auc}
+\end{figure}
+
+Closest to our objectives is the recent work of \citet{stein2024embracing}, who propose a collection of causal discovery models which they call \textit{Causal Pretrained Neural Networks (CPNNs)}. They introduce several architectures, from RNNs to Transformers \citep{vaswani2017attention}, and provide pre-trained weights of what they call \texttt{deep} model size. The transformer model (which expresses the current state-of-the-art), based on the Informer \citep{zhou2021informer} architecture, utilizes full attention (instead of sparse attention) and predicts temporal causal graphs from observational time-series data. 
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.95\textwidth]{images/stein_fmri.png}
+    \caption{Out-of-distribution performance on \(f\)-MRI semi-synthetic data of the provided transformer-based CPNN. Average True Positive Rate is 0.68. Figure generated using the relevant plotting and inference code provided by the authors.}
+    \label{fig:stein_fmri}
+\end{figure}
+
+Although it serves as the first work on a foundation model-based approach for temporal causal discovery, it faces several limitations: models are trained solely on synthetic data, constrained to low input dimensionalities (up to 5 variables), serving more as a proof-of-concept rather than a complete generalizable model. This is reflected in the diminishing performance of their introduced models as input both input dimension and model parameters increase, to a point where they perform close to a random guessing\footnote{The existence or not of an edge between two variables can be viewed as a coin flip with a 50\% chance of success.} baseline (Figure \ref{fig:stein_auc} and \citet[Figure 3]{stein2024embracing}). Additionally, provided models do not showcase strong generalization abilities to out-of-distribution (OOD) data (Figure \ref{fig:stein_fmri}), which is a key feature of our proposed models. Importantly, the above observations \textit{do not represent what we envision as a large causal model} and pave the way to many research gaps in the field which we address in this text.
+
+
+\section{Positioning of Our Work}
+
+Our proposed large causal models (LCMs) extend the foundation model paradigm for temporal causal discovery along three main axes: scalability, data realism, and pretraining strategy. Building on \citet{stein2024embracing}, we develop robust, deep models capable of handling higher-dimensional and complex datasets, evaluating generalization in out-of-distribution scenarios.
+
+\begin{enumerate}
+    \item Scalability and Generalization: We demonstrate that temporal causal discovery can be effectively scaled beyond prior limits (up to twelve (12) variables and three (3) lags) without any loss of performance. LCMs maintain robustness under out-of-distribution conditions and support deeper architectures trained on large data corpora.
+
+    \item Realistic Training: We introduce methods for curating high quality training samples, combining synthetic SCMs with realistic causal model generation using the Adversarial Causal Tuning (ACT) process. This approach bridges the gap between synthetic pretraining and real-world deployment.
+    
+    %\item Realistic Training: We introduce methods for curating high quality training samples, combining synthetic SCMs with realistic causal model generation using the Temporal Causal-based Simulation (TCS) process. This approach bridges the gap between synthetic pretraining and real-world deployment.
+
+    \item Foundation Model-Style Training: We adopt a robust pretraining regime inspired by foundation models, enabling LCMs to learn general causal representations from heterogeneous datasets and adapt zero-shot to new domains.
+\end{enumerate}
+
+To our knowledge, LCMs are the first models to combine temporal causal discovery, scalable foundation-style training, and robust out-of-distribution generalization by training on mixtures of synthetic and realistic data.
+
+%To the best of our knowledge, our LCMs are the first causal discovery models that unify all desiderata in Table \ref{tab:related-work}.
+
+Furthermore, we present promising investigations into not only a novel architecture but also on the use of interventional data and incorporation of prior knowledge.  While these directions are motivated by theoretical considerations and promising early evidence, they are presented more as ongoing work rather than established results. Their inclusion reflects on our broader goal of developing robust and generalizable causal foundation models for temporal causal discovery.
+
+%\begin{table}[ht]
+%\centering
+%\caption{Comparison of related work on key desiderata.}
+%\label{tab:related-work}
+%\begin{tabular}{lcccc}
+%\hline
+%\textbf{Method} &
+%\rotatebox{90}{Temporal} &
+%\rotatebox{90}{Pre-trained} &
+%\rotatebox{90}{Realistic Data} &
+%\rotatebox{90}{Scalable} \\
+%\hline
+%CInA \citep{zhang2023towards} & No & Yes & No & Yes \\
+%Do-PFN \citep{robertson2025do} & No & Yes & Partially & Yes \\
+%SEA \citep{wu2024sample} & No & No  & No & No \\
+%CSIvA \citep{ke2023learning} & No & No & No & No \\
+%CausalPretraining \citep{stein2024embracing} & Yes & Yes & No & No \\
+%\textbf{Our work} & \textbf{Yes} & \textbf{Yes} & \textbf{Yes} & \textbf{Yes} \\
+%\hline
+%\end{tabular}
+%\end{table}
