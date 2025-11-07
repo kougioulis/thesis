@@ -1,0 +1,135 @@
+\section{Generating Synthetic Causal Models} \label{sec:data-synthetic}
+
+Recall from Chapter \ref{chap:problem-formulation} that we formulate causal mechanisms as a (temporal) SCM, represented by a tuple \((\mathcal{G}, \mathcal{F}, \mathcal{E})\), where \(\mathcal{G}\) is the causal DAG (TSCM), \(\mathcal{F}\) the set of functional dependencies, and \(\mathcal{E}\) the set of noise distributions. Loosely speaking, a generator of random TSCMs and observational samples thus consists of a two-step process. First, a causal DAG instance \(\mathcal{G}\) is sampled from a predefined family of DAGs \(\mathbb{G}\) with various random properties. These may include the number of nodes, edge density (e.g., in-degree and out-degree distributions), the maximum number of lags \(\ell_\text{max}\) in the case of temporal SCMs, and the overall graph structure (e.g., uniform distribution of degrees). With the causal structure known, functional dependencies \( f_i = f(V^i_t | \text{Pa}(V^i_t))\) are sampled for each \(X_i \in \mathcal{G}\) given its parents in the DAG, from known functional families \(\mathcal{F}_1, \ldots,\mathcal{F}_k\), along with noise distributions \( \epsilon_i \sim \mathcal{E}_1, \ldots, \mathcal{E}_m\). For nodes \(V^i_t\) where \(\text{Pa}(V^i_t) = \emptyset\), values are sampled directly from the assumed noise distribution. With both the causal structure and quantitative dependencies defined, the second step consists of generating samples from the SCM.
+
+To illustrate sample generation, consider a simple i.i.d. example with three variables \(X, Y, Z\) and the causal DAG described by the collider \(X \rightarrow Z \leftarrow Y\). This causal graph is associated with the functional dependency \(Z := f(X,Y,\epsilon_Z)\) and noise distributions \(X \sim \epsilon_X\), \(Y \sim \epsilon_Y\). Observational samples are obtained by respecting the topological order of the DAG and generating samples recursively over the descendants (similar to ancestral sampling in latent variable models \citep{murphy2023probabilistic}). For instance, one sample may be \(X = 0.02, Y=0.12\) and \(Z = f(0.02,0.12,0.03) = 1\), where values from the noise distributions are substituted into the functional dependencies.
+
+The topology of each synthetic SCM depends on the random graph generation method. Two main methods exist for random DAG generation in the literature. The first follows the \textit{Ed\H{o}s-Renyi (ER)} paradigm \citep{fienberg2012brief}, as in \citet{hagberg2008exploring}, with variations also used by \citet{brouillard2020differentiable} and \citet{ke2022learning}. Generation begins with an empty graph for a given number of nodes, then randomly and equiprobably picks directed edges to add based on a probability \(p\). Unlike \citet{hagberg2008exploring}, acyclicity checks are applied to reject edges that would introduce cycles, as shown in Algorithm \ref{alg:erdos-renyi}. This process produces approximately uniform node degree distributions.
+
+The second approach, the \textit{Barab{\'a}si-Albert (BA)} algorithm \citep{hagberg2008exploring,barabasi1999emergence}, generates scale-free graphs whose degree distribution follows a power law. Such networks exhibit a “rich-get-richer” phenomenon where a few nodes accumulate disproportionately many connections, a property often seen in real-world networks like social graphs.
+
+In our experiments, we adopt the \textit{Ed\H{o}s-Renyi} method for generating \textit{random lagged temporal causal graphs} (Figure \ref{fig:temporal-graphs} (a)), as it allows fine-grained control over edge probabilities and density. In time-series settings, the additional temporal dimension must be considered. Since we are interested in lagged causal graphs, Algorithm \ref{alg:erdos-renyi} is adapted as follows: the number of nodes \(V\) is sampled from a discrete uniform distribution \(\mathcal{U}(V_\text{min}, V_\text{max})\), the edge probability \(p\) from \(\mathcal{U}(0, 1)\), and the maximum causal effect lag \(\ell_\text{max}\) from \(\mathcal{U}(1, \ell_\text{max})\). The resulting time-lagged graph contains \(V \cdot \ell_\text{max}\) lagged nodes at timesteps \(\tau=1, \dots, \ell_\text{max}\) and \(V\) nodes at the current timestep \(\tau=t\). Directed edges (heading forward through time) are added randomly according to the chosen \(p\), ensuring acyclicity. Furthermore, \textit{no contemporaneous edges are assumed}, i.e., edges of the form \(V^i_l - V^j_l\) do not exist.
+
+The \textit{Barab{\'a}si-Albert} model, while useful for studying scale-free networks, tends to create overly connected hubs that are less representative of causal graphs in scientific domains, and is therefore left unconsidered.
+
+ \begin{algorithm}
+ \caption{Erd\H{o}s-R\'{e}nyi DAG generator} \label{alg:erdos-renyi}
+ \begin{algorithmic} [1]
+ \renewcommand{\algorithmicrequire}{\textbf{Input:}}
+ \renewcommand{\algorithmicensure}{\textbf{Output:}}
+ \REQUIRE $n$, $p$
+ \ENSURE  a DAG $\mathcal{G}$
+  \STATE initialize $\mathcal{G}$, $\mathcal{G}^{'}$ as empty directed graphs with $n$ nodes
+  \STATE initialize $edges$ with all the possible directed arcs in $\mathcal{G}$, $m=n \cdot p$
+\WHILE {$|edges|>0$ and (number of edges in $\mathcal{G} \le m$)}
+    \STATE $e \leftarrow \text{pop(shuffle(edges))}$
+    \IF {$p \le$ random uniform sample in $[0,1]$}
+        \STATE $D \leftarrow \mathcal{G}^{'}$
+        \STATE add $e$ to $D$
+        \IF {$V$ has a cycle}
+            \STATE $D \leftarrow \mathcal{G}^{'}$
+        \ELSE 
+            \STATE add $e$ to $\mathcal{G}$
+            \STATE add $e$ to $\mathcal{G}^{'}$
+        \ENDIF
+    \ENDIF
+\ENDWHILE
+\RETURN $\mathcal{G}$ 
+\end{algorithmic}
+\end{algorithm}
+
+After generating the DAG structure with the desired properties, functional dependencies \(f^j (\text{Pa}( V^j_t), \epsilon^j_t)\) for each variable \(V^j_t \in \mathcal{G}\) are sampled from known functional families \(\mathcal{F}_1, \ldots, \mathcal{F}_k\), along with the corresponding noise distributions. This finalizes the SCM, from which observational data can be sampled.
+
+Generation of samples is carried out using causal ancestral sampling, similar to ancestral sampling in latent variable models (LVMs) \citep{murphy2023probabilistic}. In short, variables without parents are sampled from their noise distributions, and variables with parents are computed from their functional dependencies, respecting topological order. In the temporal case, parent variables are fetched from lagged causal parents, and initial “warm-up” samples are discarded to ensure stability in the generated time-series, following \citet{runge2018causal}. Assuming a known time-lagged SCM \(\mathcal{G}\) with maximum lag \(\ell_{\text{max}}\), the process is described in Algorithm \ref{alg:scm-ancestral-sampling}.
+
+\begin{algorithm}[ht!]
+\caption{Temporal SCM Ancestral Sampling (ANCESTRAL)}
+\label{alg:scm-ancestral-sampling}
+\begin{algorithmic}[1]
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
+\REQUIRE{Temporal Causal Graph \( \mathcal{G} \), max lag \( \ell_\text{max} \), number of timesteps \( T \), number of warmup steps \( W \)}
+\ENSURE Generated time-series $\{\mathbf{X}_t\}_{t=1}^{T}$
+\STATE Initialize $X^i_{t=0}$ for all $i \in \{1, \dots, N\}$ with random noise
+\FOR{$t = W + \ell_{\text{max}} + 1$ to $T$}
+    \FOR{each variable $X^i_t$ in topological order of $\mathcal{G}$}
+        \STATE Determine lagged parents $\mathrm{Pa}_{X^i_t} \gets \{X^j_{t-k} \mid (X^j, X^i) \in \mathcal{G}, 1 \leq k \leq \ell_{\text{max}}\}$
+        \STATE Compute $X^i_t \gets f_i(\mathrm{Pa}_{X^i_t}) + \epsilon^i_t$
+    \ENDFOR
+\ENDFOR
+\RETURN $\{\mathbf{X}^i_t\}_{W+\ell_{\text{max}}}^{T}$
+\end{algorithmic}
+\end{algorithm}
+
+We now elaborate on the generation hyperparameters used for synthetic sample creation. We select \(V_\text{min}=3, V_\text{max}=12\) and \(\ell_{\text{max}} = 3\). Two-variable SCMs are trivial under our assumptions (edges move forward in time and no latent confounders exist). The choice \(V_{\max}=12\) more than doubles the dimensionality of current state-of-the-art datasets, while \(\ell_{\max}=3\) balances (i) realism in short-term dependencies and (ii) tractability in training. Sampling graphs up to these limits aligns with the design constraints of our LCMs (as discussed in Section \ref{sec:problem-formulation} and Chapter \ref{chap:architecture}). A summary of these parameters is shown in Table \ref{tab:scm-parameters}.
+
+\begin{table}[h]
+\centering
+\caption{Summary of synthetic SCM generation parameters.} \label{tab:scm-parameters}
+\begin{tabular}{lllp{5cm}}
+\toprule
+\textbf{Parameter} & \textbf{Range / Values} & \textbf{Sampling}\\
+\midrule
+\# Variables \( N \) & 3 to 12 & Uniform discrete \\
+\# Lags \( \ell_{\max} \) & 1 to 3 & Uniform discrete \\
+Functional dependencies & See Table \ref{tab:functions} & Uniform discrete \\
+Noise distributions & See Table \ref{tab:noise-dists} & Categorical \\
+Edge probabilities \( p_{\text{edge}} \) & Dynamic & Categorical \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+To prevent pathological graph densities, \(p_\text{edge}\) is scaled adaptively to the number of possible lagged edges \(E=N^2 \cdot \ell_{\max}\). Specifically, \(p_\text{edge}\) is sampled from a discrete set of values inversely proportional to \(E\), with categorical weights favoring sparsity (Table \ref{tab:p-edge-ranges}). If no edges are sampled during graph generation, \(p_\text{edge}\) is iteratively increased by \(1\%\) until a valid graph is obtained. This dynamic adjustment ensures diversity across sparse, medium, and dense regimes while maintaining realism. Additionally, \(p_\text{edge}\) is upper bounded by \(0.15\) to avoid dense graphs.
+
+\begin{table}[h]
+\centering
+\caption{Functional dependencies used in synthetic SCM generation.} \label{tab:functions}
+\begin{tabular}{lll}
+\toprule
+\textbf{Family} & \textbf{Functional form} & \textbf{Description} \\
+\midrule
+Linear & \( f(x) = a x + b \) & Additive linear effect \\
+       & \( f(x_1, x_2) = a_1 x_1 + a_2 x_2 + b \) & Linear combination of parents \\
+\midrule
+Non-linear & \( f(x) = \alpha_nx^n + \ldots \alpha_0x_0 \) & Polynomial \\
+           & \( f(x) = e^x \) & Exponential Transformation \\
+           & \( f(x) = \sin(x) \) & Sinusoidal \\
+           & \( f(x_1, x_2) = x_1 x_2 \) & Multiplicative interaction \\
+           & \( f(x) = \log(1 + |x|) \) & Logarithmic transformation \\
+\midrule
+Bounded & \( f(x) = \tanh(x) \) & Hyperbolic tangent (bounded in \([-1,1]\)) \\
+        & \( f(x) = \sigma(x) \) & Sigmoid \( \big(\frac{1}{1+e^{-x}}\big) \) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Noise distributions used in synthetic SCMs (fill in as needed).} \label{tab:noise-dists}
+\begin{tabular}{lll}
+\toprule
+\textbf{Name} & \textbf{Distribution} & \textbf{Parameters} \\
+\midrule
+Gaussian & \( \mathcal{N}(\mu, \sigma^2) \) & \(\mu=0, \sigma=0.25\)\\
+Uniform & \( \mathcal{U}(a, b) \) & \( a=0, b=1 \) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Functional forms include linear, polynomial, multiplicative, bounded, and sinusoidal mappings, selected from Table \ref{tab:functions}. Each causal edge is assigned a strength coefficient \(\alpha_{ji\lambda} \sim \mathcal{U}(0.3, 0.5)\), controlling the contribution of each parent variable. These coefficients populate the nonzero entries of the lagged adjacency tensor \(\mathbb{A} \in \mathbb{R}^{V \times V \times \ell_{\text{max}}}\), interpreted as edge-level causal strengths rather than causal effect estimates. Noise distributions are sampled from those listed in Table \ref{tab:noise-dists}.
+
+Finally, each synthetic sample is padded or truncated to a fixed sequence length \(L_\text{max}=500\) and variable dimension \(V_\text{max}=12\) to ensure batch processing and model input compatibility (see Section \ref{sec:input-handling}).
+
+\begin{table}[h]
+\centering
+\caption{Edge probability values used for different synthetic causal graph densities. \(E\) denotes the number of possible lagged edges.} \label{tab:p-edge-ranges}
+\begin{tabular}{ccccl}
+\toprule
+\textbf{Edge Regime} & \textbf{Threshold} & \textbf{Values} & \textbf{Weights} & \textbf{Notes} \\
+\midrule
+Small graphs & \( E < 100 \) & \( \frac{3}{E}, \frac{5}{E}, \frac{7}{E} \) & \( 0.6, 0.3, 0.1 \) & Promotes sparsity \\
+Medium graphs & \( 100 \le E < 200 \) & \( \frac{5}{E}, \frac{7}{E}, \frac{9}{E} \) & \( 0.6, 0.3, 0.1 \) & Moderate edge density \\
+Large graphs & \( E \ge 200 \) & \( \frac{9}{E}, \frac{12}{E}, \frac{15}{E} \) & \( 0.6, 0.3, 0.1 \) & Higher density permitted \\
+\bottomrule
+\end{tabular}
+\end{table}
