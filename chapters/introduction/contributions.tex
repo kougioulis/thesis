@@ -1,0 +1,60 @@
+%\section{Main Contributions} \label{sec:contributions}
+%
+%We now provide an overview of our key contributions. These are threefold: the development of a synthetic data generation pipeline for observational\footnote{Also able to generate interventional data, if needed.} data along with their corresponding causal graphs, the Temporal Causal-based Simulation (TCS) framework for generating realistic pairs of causal graphs and time-series samples, and ultimately the design and implementation of our Large Causal Models (LCMs) trained on the data described previously.
+%
+%\subsubsection{Pipeline for Generating Synthetic Data Pairs}
+%
+%We design and implement a \textit{pipeline for generating random temporal Structural Causal Models (SCMs) and their corresponding time-series data}. Unlike prior approaches, our pipeline allows generation of larger number of variables, a richer collection of functional dependencies and accounting for sparser edge densities in the causal graph\footnote{Edge density is defined as the ratio of the number of edges to the total number of possible edges. Causal graphs are in general, sparse.}, among others. This contribution constitutes the first step towards curating the training data for the causal discovery task of our LCMs, which is detailed in Chapter \ref{chap:data} and Section \ref{sec:data-synthetic}
+%
+%\subsubsection{Temporal Causal-based Simulation (TCS)}
+%
+%Building on the synthetic SCM pipeline, we propose the \textit{Temporal Causal-based Simulation (TCS)} framework for generating realistic pairs of temporal causal graphs and time-series samples. In a nutshell, TCS generates realistic pairs of time-lagged causal graphs and associated time-series samples through a three-phase process: causal graph discovery, functional dependency estimation and noise modeling. Given an observational time-series input from real data, TCS outputs pairs that better reflect the complexity of real-world temporal systems than purely synthetic ones, based on a novel \textit{AutoML} \citep{hutter2019automated} Min-max optimization scheme (\textit{Adversarial Causal Tuning - ACT}) that selects the optimal simulation configuration using \textit{Classifier 2-Sample Tests (C2STs)}. This contribution is presented in detail in Section \ref{sec:data-simulated}.
+%
+%\subsubsection{Large Causal Models (LCMs)}
+%
+%Finally, we present \textit{Large Causal Model (LCMs)}, a scalable, pre-trained foundation model approach for temporal causal discovery. Our LCMs introduce several innovations: (i) extended input dimensionality, expanding up to 12 variables and 3 lags (compared to the previous SOTA's 5 variables and limited scalability) based on an Informer \citep{zhou2021informer} architecture and (ii) robust training on a mixture of synthetic and realistically generated data, inspired by findings from \citet{das2024decoder} that such diversity improves generalization and (iii) evaluation on a diverse mixture of synthetic and real-world collections. To the best of our knowledge, this is the first foundation-style model of its kind, trained on a mixture of synthetic and realistically generated data and evaluated in a thorough manner, showcasing robust in-distribution and zero shot out-of-distribution performance.
+%
+%We also present initial experimental results on extending causal foundation models to leverage interventional data and integrate prior knowledge during both training and causal discovery process, highlighting promising directions for future research.
+%
+
+\section{Guide to this Thesis}
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[
+    node distance=1.4cm and 1.8cm,
+    every node/.style={draw, minimum width=2.2cm, minimum height=1.0cm, align=center, font=\small},
+    solidarrow/.style={->, thick},
+    dottedarrow/.style={->, thick, dotted}
+]
+
+% Top row
+\node (intro) {1. Introduction};
+\node (context) [right=of intro] {2. Context \& \\ Problem Formulation};
+\node (data) [right=of context] {3. Training Data \\ Generation};
+
+% Bottom row
+\node (arch) [below=of intro] {4. Architecture};
+\node (train) [right=of arch] {5. Training};
+\node (results) [right=of train] {6. Results};
+\node (concl) [right=of results] {7. Conclusion};
+
+% Solid arrows
+\draw[solidarrow] (intro) -- (context);
+\draw[solidarrow] (context) -- (data);
+\draw[solidarrow] (data.south) -- ++(0,-0.5) -| (arch.north);
+\draw[solidarrow] (arch) -- (train);
+\draw[solidarrow] (train) -- (results);
+\draw[solidarrow] (results) -- (concl);
+
+% Dotted cross-links (centered to Results)
+\draw[dottedarrow] (intro.south) .. controls +(0,-1) and +(0,-0.5) .. (train.west);
+\draw[dottedarrow] (context.south) .. controls +(0,-1.0) and +(0,1.0) .. (results.north west);
+\draw[dottedarrow] (data.south) .. controls +(0,-1.0) and +(0,1.0) .. (results.north);
+
+\end{tikzpicture}
+\caption{Roadmap of this thesis. Solid arrows denote the main sequential flow of chapters. Dotted arrows indicate supporting or cross-referenced dependencies between chapters.}
+\label{fig:thesis-roadmap}
+\end{figure}
+
+This section provided a high-level overview of our text. Chapter \ref{chap:problem-formulation} serves as an introduction to needed background, mainly in Causality and briefly to Deep Learning. It introduces Structural Causal Models (SCMs), their temporal extensions and known assumptions. Concerning Deep Learning, we provide a short overview on Deep Learning terminology for the uninitiated reader and elaborate on the Transformer architecture, which forms the backbone of our LCM, and on building blocks of neural nets that we utilize later on. In section \ref{sec:problem-formulation}, we formally define the main objective of our work. Chapter \ref{chap:data} details our synthetic data pipeline and the Temporal Causal Simulation (TCS) \& Adversarial Causal Tuning (ACT) frameworks for generating data pairs for training. Chapter \ref{chap:architecture} is dedicated to the architecture of our LCMs and input handling. Chapter \ref{chap:training} discusses training objectives, optimizers, and regularization methods that are essential for training of LCMs. Chapter \ref{chap:results} evaluates trained LCMs against baselines, with ablation and generalization studies. Chapter \ref{chap:conclusion} concludes the text with contributions, limitations, and future directions. We illustrate a roadmap of this thesis in Figure \ref{fig:thesis-roadmap}.
