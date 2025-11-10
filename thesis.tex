@@ -2,11 +2,11 @@
 
 \usepackage{libtex/algo}
 \usepackage{libtex/thesisStyle}
-\usepackage{graphicx, amssymb, amsmath, url, color, xcolor, booktabs, subfig, makeidx, tikz}
-\usetikzlibrary{3d, positioning} 
-\usetikzlibrary{shapes, arrows.meta, matrix, calc, decorations.pathreplacing, positioning, quotes} %ext.paths.ortho
-\usetikzlibrary{positioning,fit,backgrounds,shadows}
+\usepackage{graphicx, amssymb, amsmath, url, caption, color, xcolor, booktabs, subfig, makeidx, tikz}
+\usetikzlibrary{3d, positioning, shapes, arrows.meta, matrix, calc, decorations.pathreplacing, positioning, quotes} %ext.paths.ortho
+\usetikzlibrary{fit,backgrounds,shadows}
 \usetikzlibrary{shapes.multipart, decorations.pathmorphing}
+\usepackage{pgfplots} % for pgfplots
 
 \tikzset{>=latex} % for LaTeX arrow head
 \colorlet{myred}{red!80!black}
@@ -32,13 +32,12 @@
 
 \usepackage[greek,english]{babel}
 \usepackage[utf8]{inputenc}
-\usepackage{pdfpages} % for \includepdf
+\usepackage{pdfpages} % for \includepdf{}
 \usepackage{caption}
 \usepackage{lipsum} % for dummy text
-\usepackage{multirow}
 \usepackage{color} % colored links
 \usepackage{hyperref} % for hyperlinks
-\definecolor{deepblue}{RGB}{0,0,35} % quite a deep blue color
+\definecolor{deepblue}{RGB}{0,0,0} % quite a deep blue color
 
 \hypersetup{
     colorlinks=true,
@@ -55,19 +54,32 @@
 \captionsetup{compatibility=false}
 
 \usepackage{multicol} % for the multicol environment
+\usepackage{multirow}
 \usepackage{bookmark}
-
 \usepackage{natbib}
-\bibliographystyle{plainnat}
+\usepackage[nottoc,numbib]{tocbibind} % for the bibliography numbering 
+
+\usepackage{booktabs}
+\usepackage{rotating} % for sidewaystable
+\usepackage{siunitx}
+
+% siunitx setup for aligned decimals
+\sisetup{
+  detect-weight=true,
+  detect-family=true,
+  table-number-alignment = center,
+  table-format = 1.3,
+  table-space-text-post = $\pm$\scriptsize{.000},
+}
 
 % Title Page
-\newcommand{\thesistitle}{Large Causal Models for AIOps}
-%\newcommand{\thesistitlegreek}{}
+\newcommand{\thesistitle}{Large Causal Models for Temporal Causal Discovery}
+\newcommand{\thesistitlegreek}{Μεγάλα Αιτιακά Μοντέλα για Χρονική Αιτιακή Ανακάλυψη}
 \newcommand{\owner}{Nikolaos Kougioulis}
 \newcommand{\firstprof}{Ioannis Tsamardinos}
 \newcommand{\secondprof}{Sofia Triantafillou}
-\newcommand{\thirdprof}{Professor 3}
-\newcommand{\csdchair}{Professor 4}
+\newcommand{\thirdprof}{Grigorios Tsagkatakis}
+\newcommand{\csdchair}{Grigorios Tsagkatakis}
 \newcommand{\thesisdate}{\today}
 
 \newtheorem{definition}{Definition}
@@ -100,27 +112,27 @@
 	\input{chapters/extras/titlepage}
 	\input{chapters/extras/approvalpage}
 	\input{chapters/abstract/abstract}
-	%\input{chapters/abstract/abstract_greek}
+	\input{chapters/abstract/abstract_greek}
 	
 	\tableofcontents
 	\listoftables
 	\listoffigures
 
-	%\input{chapters/preface/preface}
-	%\input{chapters/introduction/introduction}
-	%\input{chapters/background/causality/causality}
-	%\input{chapters/data/data}
-	%\input{chapters/architecture/architecture}
-	%\input{chapters/training/training}
-	%\input{chapters/results/results}
-	%\input{chapters/conclusion/conclusion}
-
 	\cleardoublepage
-	\addcontentsline{toc}{chapter}{Bibliography}
 
-	\nocite*{} % keep for now, remove later
+	\input{chapters/preface/preface}
+	\input{chapters/introduction/introduction}
+	\input{chapters/background/background}
+	\input{chapters/data/data}
+	\input{chapters/architecture/architecture}
+	\input{chapters/training/training}
+	\input{chapters/results/results}
+	\input{chapters/conclusion/conclusion}
+	\input{chapters/appendix/appendix}
+
+	%\nocite*{} % keep for now, remove later
+	\bibliographystyle{plainnat}
 	\bibliography{bibliography/thesis.bib}
-		
 	% Generate index (optional, if I'm using \makeindex)
 	\cleardoublepage
 	\printindex
