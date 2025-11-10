@@ -1,0 +1,1812 @@
+\appendix
+
+\chapter{\lowercase{d}-Separation}
+
+The central tool connecting conditional independencies of data and their corresponding DAG is the concept of \emph{d-separation} (directional separation) introduced by \citet{pearl1988probabilistic}. We provide its definition for completeness of our writing, as it represents a graphical criterion on whether a set of variables \(\mathbf{X}\) is conditionally independent of another set \(\mathbf{Y}\), given a third set \(\mathbf{Z}\), based on the structure of the DAG. It is defined for the i.i.d. case, but it can also be extended intuit to the time series setting.
+
+\begin{definition}[d-Separation]
+Let \(\mathcal{G}\) be a DAG over a set of variables \(\mathbf{V}\). A path \(p\) between nodes \(X\) and \(Y\) is said to be \emph{blocked} by a set of variables \(\mathbf{Z}\) if one of the following holds:
+\begin{enumerate}
+    \item There exists a chain \(A \rightarrow B \rightarrow C\) or a fork \(A \leftarrow B \rightarrow C\) such that \(B \in \mathbf{Z}\),
+    \item There exists a collider \(A \rightarrow B \leftarrow C\) such that \(B \notin \mathbf{Z}\) and no descendant of \(B\) is in \(\mathbf{Z}\).
+\end{enumerate}
+If all paths between \(X\) and \(Y\) are blocked by \(\mathbf{Z}\), then \(X\) and \(Y\) are said to be \emph{d-separated} given \(\mathbf{Z}\), written \(X \perp\!\!\!\perp Y \mid \mathbf{Z}\).
+\end{definition}
+
+D-separation serves as the graphical counterpart to conditional independence in the disentagled factorization \(\mathbb{P}\), under the assumption of the Causal Markov Condition (Section \ref{sec:causal-assumptions}). It plays a fundamental role in constraint-based causal discovery algorithms, such as the PC \citep{spirtes2001causation} algorithm (and importantly, its temporal extension PCMCI \citep{runge2018causal}), which rely on conditional independence tests to infer causal structure.
+
+\chapter{The Transformer} \label{app:transformer}
+
+In this section we aim to provide a gentle introduction to the Transformer, as it is used in our LCM architecture, without extensively elaborating on its inner mechanism. Instead, we focus only on the essential components relevant to our LCMs. We refer the reader to \citet{vaswani2017attention} for a more detailed description of the Transformer.
+
+\begin{figure}[t]
+  \centering
+  \begin{tikzpicture}[>=Stealth, node distance=1.5cm]
+
+  % Embedding layer (first row)
+  \node[draw, minimum width=1.2cm, minimum height=0.8cm] (e1) {I};
+  \node[draw, right=of e1, minimum width=1.2cm, minimum height=0.8cm] (e2) {am};
+  \node[draw, right=of e2, minimum width=1.2cm, minimum height=0.8cm] (e3) {a};
+  \node[draw, right=of e3, minimum width=1.2cm, minimum height=0.8cm] (e4) {student};
+
+  % Hidden states row (second row)
+  \node[draw, above=1.2cm of e1, minimum width=1.2cm, minimum height=0.8cm] (h1) {1};
+  \node[draw, right=of h1, minimum width=1.2cm, minimum height=0.8cm] (h2) {2};
+  \node[draw, right=of h2, minimum width=1.2cm, minimum height=0.8cm] (h3) {3};
+  \node[draw, right=of h3, minimum width=1.2cm, minimum height=0.8cm] (h4) {4};
+
+  % Arrows from embeddings to hidden states
+  \draw[->] (e1) -- (h1);
+  \draw[->] (e2) -- (h2);
+  \draw[->] (e3) -- (h3);
+  \draw[->] (e4) -- (h4);
+
+  % Recurrent connections
+  \draw[->] (h1) -- (h2);
+  \draw[->] (h2) -- (h3);
+  \draw[->] (h3) -- (h4);
+
+  % Unrolling arrow
+  \draw[->, thick] ([xshift=-0.7cm,yshift=0.6cm]h1.north west) -- ([xshift=0.7cm,yshift=0.6cm]h4.north east)
+  node[midway, above] {time};
+
+  \end{tikzpicture}
+  \caption{An RNN unrolled over the time space. Rectangles correspond to intermediate states of the RNN. The first row corresponds to the embedding layer.} 
+  \label{fig:rnn}
+\end{figure}
+
+Up to 2017, the main strategy for approaching any NLP task has been with a reccurent neural network. The Transformer paper by \citep{vaswani2017attention} introduced a novel neural architecture addressing many shortcomings of RNN-based models, in the context of machine translation (e.g. translating a sentence from French to English). RNNs have their sequential nature presents issues in parallelization, due to the unfolding of their hidden states. Modern graphical processor units (GPUs) and Tensor Processing Units (TPUs) are capable of parallelizing matrix and tensor operations. For instance, when we compute the product \(A \cdot B\) of \(A \in \mathbb{R}^{n \times k}\) and \(B \in \mathbb{R}^{k \times d}\), many sums and multiplies are not dependent on each other and can be efficiently computed congruently. For an RNN, each hidden state is dependent on the previous state \(h_{t-1}\) in the sequence, which is dependent on \(h_{t-2}\) and so on. Visually, this is depicted in Figure \ref{fig:rnn}. 
+
+Another issue concerning RNNs is the difficulty with which tokens interact with each other relative to their distance.\footnote{This is closely related to the notion of a \textit{receptive field}, i.e., the effective context or span of input elements that can influence the representation at a given position. In RNNs this receptive field grows sequentially, whereas in Transformers it is global and uniform across the sequence.} By interacting we refer to whether the presence of one token in the past affects the processing of another token in a future state. This can make it difficult to learn how distant words should impact the representation of the current word.
+
+Instead, the Transformer entirely replaces the recurrent mechanism with only self-attention operations, which allows for efficient parallelization and processing of the input sequence. The concept of attention however is not new. Essentially, the notion of direct interaction between elements of a sequence in an RNN has already been introduced with context-based neural attention by \citep{bahdanau2014neural}. The Transformer presents an entire replacement for RNNs, revolving just around the concept of self-Attention which solves both parallelization and interaction distance issues. As already discussed, this innovation reduces significant bottlenecks in training large-scale SOTA models, leading to a paradigm shift of using Transformer-based models for foundation models to only for Natural Language Processing but for other domains as well.
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.5\textwidth]{images/app/transformer.png}
+\caption{Illustration of the Transformer Encoder-Decoder architecture by \citet{vaswani2017attention}.}
+\label{fig:transformer}
+\end{figure}
+
+\section*{High-Level Overview}
+
+We begin with a high-level overview of the vanilla Transformer architecture, as introduced in the seminal work of \citet{vaswani2017attention}, originally designed for machine translation. In this section, inputs and outputs are assumed to be sequences of words (not yet multivariate time-series). The architecture follows an \textit{encoder-decoder} structure, with each side consisting of \(N\) identical blocks. In Figure \ref{fig:transformer}, the left part corresponds to the Encoder and the right part to the Decoder. This design replaces the recurrence in RNN/LSTM-based models with purely attention-driven computations, enabling full parallelization during training and more efficient scaling to large datasets.
+
+\subsection*{Embeddings and Positional Encodings}
+
+Let the input sequence be \(F = (w_1, \ldots, w_n)\), where each \(w_i \in \mathcal{V}\), the vocabulary of size \(|\mathcal{V}|\). The first step is to map discrete tokens into continuous representations. Each token \(w_i\) is projected into a dense vector \(u_i \in \mathbb{R}^{d_\text{model}}\) via an \emph{embedding layer}, yielding the matrix representation
+\[
+X = \begin{bmatrix} u_1^\top \\ u_2^\top \\ \vdots \\ u_n^\top \end{bmatrix} \in \mathbb{R}^{n \times d_\text{model}}.
+\]
+
+where \(d_\text{model}\) is the dimensionality of the embeddings and known as the \textit{model dimension}. It is a hyperparameter, tuned by the user, which controls the dimensionality of the representation and as such the capacity of the model. As will be made evident later on, a larger model dimension results in a more complex model with a higher number of learnable parameters. These embeddings may be randomly initialized and learned during training, pre-trained (e.g., word2vec, GloVe), or obtained from more advanced contextual models.
+
+Since there is no dependence of position in the Transformer mechanism, positional information must be injected explicitly. This is achieved by adding \emph{positional encodings} to each embedding. These encodings can be either (i) fixed, such as the original sinusoidal functions which allow extrapolation to unseen sequence lengths, or (ii) learnable, updated during training. Formally, the effective input becomes
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.9\textwidth]{images/app/positional_encodings.png}
+  \caption{Illustration of various sinusoidal positional encodings for \( d_\text{model}=4,5,6,7\) and sequence length \(L=100\).} 
+  \label{fig:pos_encodings}
+\end{figure}
+
+\begin{equation}
+\tilde{u}_i = u_i + p_i, \quad i = 1,\ldots,n,
+\end{equation}
+
+where \(p_i \in \mathbb{R}^{d_\text{model}}\) encodes position \(i\). Unlike recurrent models (RNNs, LSTMs, GRUs), which carry positional information through sequential state updates, Transformers rely entirely on these encodings. An illustration of the positional encodings is shown in Figure \ref{fig:pos_encodings}.
+
+\subsection*{Encoder}
+
+The encoder processes the input sequence through a stack of \(N\) identical blocks. Each block contains: (i) \textit{Multi-Head Self-Attention}, which allows each token to attend to all others in the sequence in parallel, (ii) \textit{Feed-Forward Network (FFN)}, a two-layer position-wise MLP with nonlinearity: \(\text{FFN}(x) = \max(0, xW_1 + b_1) W_2 + b_2 \) and (iii) \textit{Add \& Norm}, consisting of residual connections and layer normalization to stabilize training. The encoder produces a sequence of contextualized representations that encode global dependencies across tokens. Only the final encoder layer output is directly passed to the decoder, though it is used by every decoder block.
+
+\subsection*{Decoder}
+
+The decoder operates analogously to the encoder but with two crucial differences. The target sequence \(E = (e_1, \ldots, e_\ell)\) is first embedded (with a prepended start-of-sequence token $\langle \text{SOS} \rangle$ and shifted right by one position). Each decoder block then contains (i) \textit{Masked Multi-Head Self-Attention}, where a causal mask ensures that position \(i\) can only attend to tokens \(< i\), preventing information leakage from future positions, (ii) \textit{Encoder-Decoder Attention}, a cross-attention mechanism (for which we won't elaborate) that allows the decoder to query encoder outputs, aligning target tokens with the source sequence and (iii) a \textit{Feed-Forward Network (FFN)} with residual and normalization layers as in the encoder.
+
+After passing through the stack of \(N\) decoder blocks, the output logits are transformed by a \textit{final linear projection} (i.e. a feedforward linear layer) and a \textit{softmax} function. The linear projection maps the hidden states into a vector of dimension \(|\mathcal{V}|\), the vocabulary size. The softmax function then converts these scores into probabilities: \[ \text{softmax}(z_i) = \frac{\exp(z_i)}{\sum_{j=1}^{|\mathcal{V}|} \exp(z_j)} \quad \text{for each } i \in \{1, \ldots, |\mathcal{V}|\}, \] where \(z \in \mathbb{R}^{|\mathcal{V}|}\) are the logits produced by the final linear layer.
+
+During training, the entire ground-truth sequence is available, and the model predicts all positions in parallel. During \emph{inference}, however, the decoder generates tokens autoregressively, feeding each predicted token back as input until the end-of-sequence symbol is reached. Decoding can be done greedily or with beam search for better sequence-level optimization.
+
+\subsection*{The Attention Mechanism} \label{sec:attention}
+
+We can now elaborate on the internal mechanism of the Transformer, the \textit{self-Attention} operation. Broadly speaking, it can viewed as a mechanism of taking a query (like in database search), looking-up information in a key-value store by selecting the values of the keys that most likely match the given query. In a sense, by "most likely match" we refer to putting more weight to those that correspond to the keys more like the query, and by "selecting" by averaging over all values. As discussed before, many types of attention exist. The specific type of attention used by the Transformer is known as \textit{Query-Key-Value self-Attention}. The main idea is that each token representation can \textit{attend} to other tokens in the sequence and integrate their collective information. Given an input matrix \(X \in \mathbb{R}^{L \times d_\text{model}}\) (with \(L\) tokens and model dimension \(d_\text{model}\)), the query, key and value projections are computed: 
+
+\begin{equation}
+  Q = XW_Q, \quad K = XW_K, \quad V = XW_V
+\end{equation}
+
+where \(W_Q, W_K, W_V \in \mathbb{R}^{d_\text{model} \times d}\) are learnable weight matrices for the query, key, and value projections. Often it is assumed that \(d = d_K = d_V = d_Q\). Now consider a token \(\mathbf{x}_i\) in the sequence \(x_{1:n}\). The contextual representation \(\mathbf{h}_i\) of \(\mathbf{x}_i\) is the weighted sum of the values of the sequence \( \mathbf{h}_i = \sum_{j=1}^{n}\alpha_{ij}\mathbf{v}_j \), where the weights \(\alpha_{ij}\) control the strength of each value \(\mathbf{v}_j\). The weights are obtained by computing the affinities between the keys and the query, which is the inner product \(q^T_i k_j\) and then taking the softmax to obtain probablities: 
+
+\begin{equation}
+  \alpha_{ij} = \frac{\exp(q^T_i k_j)}{\sum_{j=1}^{n} \exp(q^T_i k_j)}
+\end{equation}
+
+Regarding complexity, computing the attention scores involves the inner product \(QK^\top \in \mathbb{R}^{L \times L}\) which costs \(\mathcal{O}(L^2)\) in time and requires \( \mathcal{O}(L^2)\) space for storing the pairwise similarities. Multiplying the score matrix with the values matrix \(V\) adds another \(\mathcal{O}(L^2 d)\). A novelty by \citet{vaswani2017attention} is the scaling of the product with respect to the square root of the dimensionality of the keys \(d_k\), resulting in the \textit{scaled dot-product attention}: 
+
+\begin{equation}
+  \text{Attention}(Q, K, V) = \text{softmax}(\left(\frac{Q K^\top}{\sqrt{d_k}}\right)) V
+\end{equation}
+
+where \(d_k\) is the dimension of keys. The intuition is that when the dimensionality \(d_k\) of the dotted vectors grows large, the dot product of even random vectors (as during initialization) scales roughly as \( \sqrt{d_k}\).
+
+Each row of the resulting matrix is a weighted average of the values, where weights are determined by the similarity between queries and keys. The scaling by \(\sqrt{d_k}\) prevents large dot products from destabilizing gradients. Note that for the algebra to work out, the number of keys and values n must be equal, but the number of queries m can vary.
+
+\subsection*{Multi-Head Attention}
+
+Intuitively, a single self-attention operation is best at picking out a single value (on average) from the input value set. It does so softly, by averaging over all of the values, but it requires a balancing game in the key-query dot products in order to carefully average two or more things. Instead of performing a single attention operation, the Transformer uses \(h\) \textit{independent attention heads} to capture multiple types of relationships i parallel, which applies self-attention multiple times with different query, key and value transformations on the same input, with the outputs concatenated and projected back:
+
+\begin{equation}
+\text{MultiHead}(Q, K, V) = \text{Concat}(\text{head}_1,\ldots,\text{head}_h)W^O,
+\end{equation}
+
+where \(\text{head}_i = \text{Attention}(QW^Q_i, KW^K_i, VW^V_i)\).
+
+This design allows the model to represent diverse dependencies (syntactic, semantic, positional) simultaneously. While the theoretical cost is \(\mathcal{O}(L^2 d_\text{model})\) in both time and space, optimized implementations (e.g., FlashAttention) can reduce memory usage to \(\mathcal{O}(L d_\text{model})\), improving scalability, but remaining outside the scope of our work.
+
+\subsection*{Layer Normalization}
+
+Layer normalization \citep{ba2016layer} is crucial for stabilizing training. For token \(h_i \in \mathbb{R}^d\), statistics are computed across the hidden dimension:
+
+\begin{equation}
+\hat{\mu}_i = \frac{1}{d}\sum_{j=1}^d h_{ij}, \quad \hat{\sigma}_i^2 = \frac{1}{d}\sum_{j=1}^d (h_{ij} - \hat{\mu}_i)^2,
+\end{equation}
+
+and the normalized output is
+
+\begin{equation}
+\text{LayerNorm}(h_i) = \frac{h_i - \hat{\mu}_i}{\sqrt{\hat{\sigma}_i^2 + \epsilon}} \cdot \gamma + \beta,
+\end{equation}
+
+with learnable scale and bias parameters \(\gamma,\beta \in \mathbb{R}^d\).
+
+\subsection*{Residual Connections}
+
+Residual connections \citep{he2016deep} alleviate vanishing gradients and ease optimization in deep architectures. Formally,
+
+\begin{equation}
+\text{Residual}(x) = x + \text{Layer}(x).
+\end{equation}
+
+The Transformer uses a combination of residual connections and normalization, known as \emph{Add \& Norm}. Two main variants exist:
+
+\begin{equation}
+h = \text{LayerNorm}(x + \text{Layer}(x)) \quad \text{(post-norm)},
+\end{equation}
+
+\begin{equation}
+h = x + \text{LayerNorm}(\text{Layer}(x)) \quad \text{(pre-norm)}.
+\end{equation}
+
+Empirically, pre-norm architectures exhibit better gradient flow and faster convergence in very deep Transformers \citep{xiong2020layer}.
+
+\subsection*{Dropout Layers}
+
+Dropout \citep{srivastava2014dropout} is a regularization technique designed to mitigate overfitting in neural networks by randomly deactivating a subset of neurons during training. At each iteration, a binary mask \( m \sim \text{Bernoulli}(p) \) is sampled where \(p\) denotes the probability of retaining a unit. The layer output is then given by
+
+\begin{equation}
+  \text{Dropout}(x) = m \odot x,
+\end{equation}
+
+where \(\odot\) denotes element-wise multiplication. During inference, dropout is typically disabled, and activations are scaled by the retention probability p to preserve the expected activation magnitude. In Transformer models, dropout is commonly applied to several components: (i) the outputs of attention weights before the residual addition, (ii) the outputs of feed-forward sublayers, and (iii) the input embeddings. Studies by \citet{zhai2022scaling} have shown that dropout contributes significantly to generalization in large-scale sequence models, particularly when combined with normalization and residual connections.
+
+\chapter{Optimizers} \label{app:optimizers}
+
+This chapter serves as complimentary material to the high level overview of deep learning in Section \ref{sec:dl} for the interested reader, concerning the optimization of deep learning models.
+
+\section*{Stochastic Gradient Descent}
+
+Named after its inherent randomness, \textit{Stochastic Gradient Descent (SGD)} is one of the most well-known optimizers. Many consider it a cardinal pillar of modern artificial intelligence systems, as its core ideas remain highly relevant.  Depending on the specific problem and the input dataset, using the original SGD algorithm as-is can present significant issues. For example, consider an input dataset \(x\) with a substantial amount of highly diverse samples, \(x_d\). Since the gradient update in the original SGD is computed based on a \textit{single drawn sample} per iteration, the gradient computed for these \(x_d\) samples may point in a direction completely opposite to the overall underlying distribution of \(x\). This scenario leads to unstable, highly variant gradients, which consequently implies slower convergence or even failure to converge.
+
+
+  \begin{algorithm}[t]
+  \caption{Mini-Batch Stochastic Gradient Descent (SGD)} \label{alg:sgd}
+  \begin{algorithmic}[1]
+  \renewcommand{\algorithmicrequire}{\textbf{Input:}}
+  \renewcommand{\algorithmicensure}{\textbf{Output:}}
+  \REQUIRE Parameters $\theta$, learning rate $\eta$, batch size $B$, loss function $\mathcal{L}$
+  \ENSURE Updated parameters $\theta$
+  \FOR{each iteration $t = 1, 2, \dots$}
+      \STATE Sample a mini-batch $\{(x^{(i)}, y^{(i)})\}_{i=1}^{B}$
+      \STATE $g_t \gets \frac{1}{B} \sum_{i=1}^{B} \nabla_\theta \mathcal{L}(f(x^{(i)};\theta), y^{(i)})$
+      \STATE $\theta \gets \theta - \eta \, g_t$
+  \ENDFOR
+  \end{algorithmic}
+  \end{algorithm}
+
+\section*{Mini-Batch SGD}
+
+The original SGD method described previously is often unstable because it updates the model's parameters using the gradient from only one sample at a time. To address this, a superior variant called Mini-Batch SGD is typically used. Instead of a single sample, Mini-Batch SGD computes the gradient using a batch of samples in each iteration. This approach offers significant benefits: (i) \textit{stability}, as a batch of samples provides a much more representative estimate of the input data's distribution than a single sample. Consequently, the calculated gradients and the model's overall convergence are much more stable. (ii) \textit{generalization}: Mini-Batch SGD is a generalization of the original SGD; the two are identical when the batch size \(B\) is equal to one. Nevertheless, it is almost always preferable to use a (non-zero) power of two as batch size \footnote{Generally speaking, since memory management in all modern operating systems is organized in powers of two, selecting a power of two for the batch size avoids fetching more pages than needed, therefore improving the algorithm's overall speed.}.
+
+Additionally, when implementing algorithms like this, biases are often omitted from the pseudocode for simplicity. This is because a bias term is mathematically and functionally just another trainable parameter (a weight) in the model. There's no practical need to update or treat biases separately from the other weights.
+
+\section*{Adam Optimizer}
+
+The \textit{Adaptive Moment Estimation (Adam)} optimizer \citep{kingma2015adam} enhances Mini-Batch SGD by incorporating two key momentum variables. A core limitation of standard Mini-Batch SGD is that updates from previous iterations are entirely disregarded when calculating new updates. This can lead to undesirable \textit{oscillations}, where weights are updated consecutively in wildly different directions, thereby impeding convergence. Adam addresses this by introducing the first moment variable, \(\mathbf{m}\), which serves to maintain the momentum gained from previous updates. Adam further improves stability and efficiency using the second moment variable, \(\mathbf{v}\), which provides an \textit{individual learning rate} for every weight in the model. Specifically, contrary to Mini-Batch SGD's fixed learning rate, when a weight receives a relatively large update (i.e., its gradient magnitude is high), its effective learning rate is reduced for subsequent iterations. This mechanism prevents consecutive large updates to the same weights, offering a crucial boost to the optimizer's stability and preventing slow convergence.
+
+
+\begin{algorithm}[t]
+\caption{Adam Optimizer} \label{alg:adam}
+\begin{algorithmic}[1]
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
+\REQUIRE Parameters $\theta$, learning rate $\eta$, $\beta_1, \beta_2 \in [0,1)$, $\epsilon > 0$
+\ENSURE Updated parameters $\theta$
+\STATE Initialize $m_0 \gets 0$, $v_0 \gets 0$, $t \gets 0$
+\FOR{each iteration}
+    \STATE $t \gets t+1$
+    \STATE Sample mini-batch and compute gradient $g_t \gets \nabla_\theta \mathcal{L}(\theta)$
+    \STATE $m_t \gets \beta_1 m_{t-1} + (1 - \beta_1) g_t$ \hfill (First moment)
+    \STATE $v_t \gets \beta_2 v_{t-1} + (1 - \beta_2) g_t^2$ \hfill (Second moment)
+    \STATE $\hat{m}_t \gets \frac{m_t}{1 - \beta_1^t}$ \hfill (Bias correction)
+    \STATE $\hat{v}_t \gets \frac{v_t}{1 - \beta_2^t}$ \hfill (Bias correction)
+    \STATE $\theta \gets \theta - \eta \cdot \frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon}$
+\ENDFOR
+\end{algorithmic}
+\end{algorithm}
+
+The success of Adam stems from its ability to combine the advantages of two prior extensions of Mini-Batch SGD: the \textit{Adaptive Gradient Algorithm (AdaGrad)} \citep{duchi2011adaptive} and \textit{Root Mean Square Propagation (RMSProp)} \citep{tieleman2012lecture}.
+Despite its prevalence, robustness, and efficacy across most tasks, Adam is not universally optimal. There are scenarios where its heightened stability can actually be detrimental, causing it to struggle in finding an adequate minimum or generalizing as well as simpler optimizers like Mini-Batch SGD. For instance, Mini-Batch SGD is known to generalize better for many \textit{Convolutional Neural Networks (CNNs)}, while Adam is often the optimizer of choice for models like \textit{Generative Adversarial Networks (GANs)} \citep{goodfellow2014generative}. Consequently, research continues to be dedicated to finding superior optimization algorithms \citep{chen2023symbolic}.
+
+%\chapter{Loss Functions}
+%
+%\section{Mean Squared Error (MSE) and Mean Absolute Error (MAE)}
+%  The \textit{Mean Squared Error (MSE)}, also known as \textit{quadratic} or \(L_2\) loss, is commonly used in regression problems and is defined as:
+%
+%  \begin{equation}
+%      \text{MSE}(y[n], \hat{y}[n]) = \frac{1}{N} \sum_{n=1}^N (y[n] - \hat{y}[n])^2
+%  \end{equation}
+%
+%  As the name suggests, the MSE measures the average squared difference between the predictions and ground truths. Due to squaring, predictions that are distant from the actual values are heavily penalized compared to less deviated ones.
+%
+%  The \textit{Mean Absolute Error (MAE)}, also known as \textit{absolute} or \(L_1\) loss, is often used in regression problems and is defined as:
+%
+%  \begin{equation}
+%      \text{MAE}(y[n], \hat{y}[n]) = \frac{1}{N} \sum_{n=1}^N |y[n] - \hat{y}[n]|
+%  \end{equation}
+%
+%  Like the MSE, it measures the magnitude of error without considering the direction, but it is more robust to outliers since it does not square the difference.
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\cleardoublepage
+
+\chapter{Illustrative Example} \label{app:illustrative_example}
+
+To provide an intuitive demonstration of our LCMs, we construct a synthetic temporal causal process consisting of three variables \(V^1, V^2\) and \(V_3\). The example is governed by a simple temporal structural causal model:
+
+\[
+V^1_t := \epsilon_1(t), \quad 
+V^2_t := 3 V^1_{t-1} + \epsilon^2_t, \quad 
+V^3_t := V^2_{t-2} + 5 V^1_{t-3} + \epsilon^3_t,
+\]
+
+where \(\epsilon^i_t \sim \mathcal{N}(0,1) ~ \forall i \in \{1,2,3\}, t \in \mathbb{Z}\). This induces the following lagged causal relationships:
+
+\[
+V^1 \xrightarrow[\text{lag}=1]{} V^2, \quad 
+V^1 \xrightarrow[\text{lag}=3]{} V^3, \quad 
+V^2 \xrightarrow[\text{lag}=2]{} V^3
+\]
+
+The function \texttt{run\_illustrative\_example} generates \(500\) synthetic time series data and the corresponding ground-truth lagged adjacency tensor. We then feed this data through the \texttt{9.4M} LCM model. The predicted lagged adjacency tensor is visualized in Figure \ref{app:lagged_adjacency_tensor}, while the corresponding true and predicted lagged causal graphs, tresholded at \(tau=0.05\), are shown in Figure \ref{app:lagged_causal_graph}. As expected, the model successfully captures the underlying causal structure of this simple temporal dataset.
+
+\begin{sidewaysfigure}[h!]
+\centering
+\includegraphics[width=0.9\textwidth]{images/example/lagged_adjacency_tensor.png}
+\caption{Predicted (non-thresholded) lagged adjacency tensor \(\hat{\mathbb{A}_{i,j,\ell}}\) by the \texttt{9.4}M LCM on the illustrative example.}
+\label{app:lagged_adjacency_tensor}
+\end{sidewaysfigure}
+
+\begin{sidewaysfigure}
+  \centering
+  \includegraphics[width=0.9\textwidth]{images/example/lagged_causal_graphs.png}
+  \caption{Ground truth (left) and predicted (right) lagged causal graphs on the \texttt{9.4M} LCM on the illustrative example.}
+  \label{app:lagged_causal_graph}
+\end{sidewaysfigure}
+
+
+\chapter{Additional Results} \label{app:additional_results}
+
+The following pages contain the complete set of experimental results reported in the main text, as well as additional results. We report the statistical significance of \(\mathrm{AUC}\) differences between model variants, where each entry lists the mean \(\mathrm{AUC}\), its standard deviation, raw p-value, and whether the difference remains significant after correction. For the above tables, we use a Bonferroni correction for multiple comparisons. For data collections with less than \(30\) samples, such as the \(f\)MRI datasets, we do not report p-values as the sample size is too small to obtain a reliable estimate.
+
+Tables \ref{app:training-aids-ablation} \& \ref{app:training-aids-ablation-significance} contain results for training aids ablations on the in-distribution synthetic test set. Tables \ref{app:mix-sim-fmri5-results} to \ref{app:mix-sim-airqualityms-significance} report results on selecting the optimal mixture of synthetic and realistic data for training of LCMs. Figures \ref{app:synth230k-runtimes} to \ref{app:kuramoto-10-runtimes} illustrate representative running times across datasets and model variants. Finally, Tables \ref{app:s-joint-largescale} to \ref{app:airqualityms-uprated} contain the complete set of experimental results covered in the main text.
+
+%\section*{}
+%\addcontentsline{toc}{chapter}{Appendix : Additional Results}
+
+\begin{sidewaystable}[p]
+\centering
+\caption{Training aids ablations for LCMs on the in-distribution synthetic holdout test set of \texttt{S\_Joint}.}
+\label{app:training-aids-ablation}
+\small
+
+\textbf{Test Set:} in-distribution (holdout)
+\vspace{0.5em}
+
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Test Data} & \textbf{Lags} & \textbf{Variables} & \textbf{Func. Dep.} & \textbf{\# Samples} & \textbf{\# Datasets} \\
+\midrule
+S\_Joint & 1--3 & 3--5 & L, NL & 500 & 2000 \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+\hfill
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Max epochs & 100 \\
+Patience & \textbf{20} \\
+Learning rate \(lr\) & \(1\text{e-}4\) \\
+\(d_{model}\) & 256 \\
+\(n_{heads}\) & 2 \\
+\(n_{blocks}\) & 1 \\
+\(d_{ff}\) & 128 \\
+Dropout & \textbf{0.05} \\
+\(L_{max}\) & 500 \\
+Training Aids & No / Yes \\
+Total params & 905K / 914K \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+
+\vspace{1em}
+
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{
+l
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+}
+\toprule
+\textbf{Model} & {\(\text{AUC}_{mean}\)} & {\(\text{TPR}_{mean}\)} & {$\text{FPR}_{mean}$} & {$\text{TNR}_{mean}$} & {$\text{FNR}_{mean}$} & {$\text{Precision}_{mean}$} & {$\text{Recall}_{mean}$} & {$\text{F1}_{mean}$} \\
+\midrule
+LCM\textsubscript{(Informer)} & 0.830 {\tiny $\pm$ .000} & 0.972 {\tiny $\pm$ .000} & 0.311 {\tiny $\pm$ .000} & 0.689 {\tiny $\pm$ .000} & 0.028 {\tiny $\pm$ .000} & 0.743 {\tiny $\pm$ .000} & 0.972 {\tiny $\pm$ .000} & 0.841 {\tiny $\pm$ .000} \\
+LCM\textsubscript{(Informer, CI)} & 0.845 {\tiny $\pm$ .000} & 0.977 {\tiny $\pm$ .000} & 0.287 {\tiny $\pm$ .000} & 0.713 {\tiny $\pm$ .000} & 0.023 {\tiny $\pm$ .000} & 0.800 {\tiny $\pm$ .000} & 0.977 {\tiny $\pm$ .000} & 0.826 {\tiny $\pm$ .000} \\
+LCM\textsubscript{(Informer, CI, $\lambda_{CR}=1$)} & 0.875 {\tiny $\pm$ .000} & 0.883 {\tiny $\pm$ .000} & 0.134 {\tiny $\pm$ .000} & 0.866 {\tiny $\pm$ .000} & 0.116 {\tiny $\pm$ .000} & 0.817 {\tiny $\pm$ .000} & 0.883 {\tiny $\pm$ .000} & 0.844 {\tiny $\pm$ .000} \\
+LCM\textsubscript{(Informer, CI, $\lambda_{CR}=0.25$)} & 0.870 {\tiny $\pm$ .000} & 0.859 {\tiny $\pm$ .000} & 0.119 {\tiny $\pm$ .000} & 0.881 {\tiny $\pm$ .000} & 0.141 {\tiny $\pm$ .000} & 0.816 {\tiny $\pm$ .000} & 0.859 {\tiny $\pm$ .000} & 0.830 {\tiny $\pm$ .000} \\
+LCM\textsubscript{(Informer, CI, $\lambda_{CR}=0.5$)} & 0.876 {\tiny $\pm$ .000} & 0.924 {\tiny $\pm$ .000} & 0.172 {\tiny $\pm$ .000} & 0.828 {\tiny $\pm$ .000} & 0.076 {\tiny $\pm$ .000} & 0.816 {\tiny $\pm$ .000} & 0.924 {\tiny $\pm$ .000} & 0.863 {\tiny $\pm$ .000} \\
+LCM\textsubscript{(Informer, CI, $\lambda_{CR}=0.75$)} & 0.875 {\tiny $\pm$ .000} & 0.893 {\tiny $\pm$ .000} & 0.143 {\tiny $\pm$ .000} & 0.857 {\tiny $\pm$ .000} & 0.107 {\tiny $\pm$ .000} & 0.819 {\tiny $\pm$ .000} & 0.893 {\tiny $\pm$ .000} & 0.849 {\tiny $\pm$ .000} \\
+\bottomrule
+\end{tabular}
+}
+\end{sidewaystable}
+
+\begin{sidewaystable}[htbp]
+\centering
+\scriptsize
+\caption{Significance of AUC differences between LCM variants trained on the in-distribution synthetic holdout test set of \texttt{S\_Joint}. Reported are mean AUCs ($\pm$ standard deviation), raw p-values, and significance after correction.}
+\label{app:training-aids-ablation-significance}
+\begin{tabular}{llcccc}
+\toprule
+\textbf{Model A} & \textbf{Model B} & $\mathbf{\text{AUC}_A^{mean}}$ & $\mathbf{\text{AUC}_B^{mean}}$ & $\mathbf{p\text{-}value_{raw}}$ & \textbf{Significant After Correction} \\
+\midrule
+LCM(Informer) & LCM(Informer, CI) & 0.8305 {\tiny $\pm$ 0.0783} & 0.8450 {\tiny $\pm$ 0.1126} & 2.55e$^{-08}$ & Yes \\
+LCM(Informer) & LCM(Informer, CI, $\lambda_{\text{CR}}$=1) & 0.8305 {\tiny $\pm$ 0.0783} & 0.8747 {\tiny $\pm$ 0.1507} & 3.75e$^{-53}$ & Yes \\
+LCM(Informer) & LCM(Informer, CI, $\lambda_{\text{CR}}$=0.25) & 0.8305 {\tiny $\pm$ 0.0783} & 0.8699 {\tiny $\pm$ 0.1603} & 1.13e$^{-38}$ & Yes \\
+LCM(Informer) & LCM(Informer, CI, $\lambda_{\text{CR}}$=0.5) & 0.8305 {\tiny $\pm$ 0.0783} & 0.8760 {\tiny $\pm$ 0.1355} & 5.24e$^{-83}$ & Yes \\
+LCM(Informer) & LCM(Informer, CI, $\lambda_{\text{CR}}$=0.75) & 0.8305 {\tiny $\pm$ 0.0784} & 0.8748 {\tiny $\pm$ 0.1483} & 2.39e$^{-59}$ & Yes \\
+LCM(Informer, CI) & LCM(Informer, CI, $\lambda_{\text{CR}}$=1) & 0.8450 {\tiny $\pm$ 0.1126} & 0.8747 {\tiny $\pm$ 0.1507} & 4.56e$^{-58}$ & Yes \\
+LCM(Informer, CI) & LCM(Informer, CI, $\lambda_{\text{CR}}$=0.25) & 0.8450 {\tiny $\pm$ 0.1126} & 0.8699 {\tiny $\pm$ 0.1603} & 6.90e$^{-42}$ & Yes \\
+LCM(Informer, CI) & LCM(Informer, CI, $\lambda_{\text{CR}}$=0.5) & 0.8450 {\tiny $\pm$ 0.1126} & 0.8760 {\tiny $\pm$ 0.1355} & 1.55e$^{-79}$ & Yes \\
+LCM(Informer, CI) & LCM(Informer, CI, $\lambda_{\text{CR}}$=0.75) & 0.8450 {\tiny $\pm$ 0.1126} & 0.8748 {\tiny $\pm$ 0.1483} & 2.79e$^{-61}$ & Yes \\
+LCM(Informer, CI, $\lambda_{\text{CR}}$=1) & LCM(Informer, CI, $\lambda_{\text{CR}}$=0.25) & 0.8747 {\tiny $\pm$ 0.1507} & 0.8699 {\tiny $\pm$ 0.1603} & 4.68e$^{-05}$ & Yes \\
+LCM(Informer, CI, $\lambda_{\text{CR}}$=1) & LCM(Informer, CI, $\lambda_{\text{CR}}$=0.5) & 0.8747 {\tiny $\pm$ 0.1507} & 0.8760 {\tiny $\pm$ 0.1355} & 8.10e$^{-28}$ & Yes \\
+LCM(Informer, CI, $\lambda_{\text{CR}}$=1) & LCM(Informer, CI, $\lambda_{\text{CR}}$=0.75) & 0.8750 {\tiny $\pm$ 0.1505} & 0.8748 {\tiny $\pm$ 0.1483} & 0.0192 & No \\
+LCM(Informer, CI, $\lambda_{\text{CR}}$=0.25) & LCM(Informer, CI, $\lambda_{\text{CR}}$=0.5) & 0.8699 {\tiny $\pm$ 0.1603} & 0.8760 {\tiny $\pm$ 0.1355} & 1.98e$^{-22}$ & Yes \\
+LCM(Informer, CI, $\lambda_{\text{CR}}$=0.25) & LCM(Informer, CI, $\lambda_{\text{CR}}$=0.75) & 0.8698 {\tiny $\pm$ 0.1604} & 0.8748 {\tiny $\pm$ 0.1483} & 2.31e$^{-12}$ & Yes \\
+LCM(Informer, CI, $\lambda_{\text{CR}}$=0.5) & LCM(Informer, CI, $\lambda_{\text{CR}}$=0.75) & 0.8760 {\tiny $\pm$ 0.1356} & 0.8748 {\tiny $\pm$ 0.1483} & 8.22e$^{-18}$ & Yes \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{sidewaystable}[p]
+\centering
+\caption{Optimal mixture of synthetic and simulated data for LCM training, evaluated on the out-of-distribution semi-synthetic test collection \(f\)\texttt{MRI5}. Reported are mean ($\pm$ standard deviation) values across multiple runs.}
+\label{app:mix-sim-fmri5-results}
+\small
+
+\textbf{Test Set:} Out-of-Distribution (Semi-Synthetic)
+\vspace{0.5em}
+
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Test Data} & \textbf{Lags} & \textbf{Variables} & \textbf{Func. Dep.} & \textbf{\# Samples} & \textbf{\# Datasets} \\
+\midrule
+\(f\)MRI5 & 1 & 5 & NL & 200-2400 & 21 \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+\hfill
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Max epochs & 100 \\
+Patience & \textbf{20} \\
+Learning rate \(lr\) & \(1\text{e-}4\) \\
+\(d_{model}\) & 256 \\
+\(n_{heads}\) & 2 \\
+\(n_{blocks}\) & 1 \\
+\(d_{ff}\) & 256 \\
+Dropout & \textbf{0.05} \\
+\(L_{max}\) & 500 \\
+Training Aids & CI, CR \\
+Total params & 1.01M \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+
+\vspace{1em}
+
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{
+l
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+}
+\toprule
+\textbf{Model (Synth/Sim \%)} & $\mathbf{\text{AUC}_{mean}}$ & $\mathbf{\text{TPR}_{mean}}$ & $\mathbf{\text{FPR}_{mean}}$ & $\mathbf{\text{TNR}_{mean}}$ & $\mathbf{\text{FNR}_{mean}}$ & $\mathbf{\text{Precision}_{mean}}$ & $\mathbf{\text{Recall}_{mean}}$ & $\mathbf{\text{F1}_{mean}}$ \\
+\midrule
+LCM (100/0) & 0.819{\tiny $\pm$.000} & 0.929{\tiny $\pm$.002} & 0.289{\tiny $\pm$.001} & 0.710{\tiny $\pm$.010} & 0.070{\tiny $\pm$.002} & 0.794{\tiny $\pm$.000} & 0.929{\tiny $\pm$.002} & 0.844{\tiny $\pm$.003} \\
+LCM (80/20) & 0.877{\tiny $\pm$.003} & 1.000{\tiny $\pm$.000} & 0.245{\tiny $\pm$.007} & 0.754{\tiny $\pm$.007} & 0.000{\tiny $\pm$.000} & 0.813{\tiny $\pm$.003} & 1.000{\tiny $\pm$.000} & 0.894{\tiny $\pm$.002} \\
+LCM (50/50) & 0.894{\tiny $\pm$.002} & 0.974{\tiny $\pm$.002} & 0.186{\tiny $\pm$.004} & 0.813{\tiny $\pm$.004} & 0.020{\tiny $\pm$.002} & 0.843{\tiny $\pm$.003} & 0.974{\tiny $\pm$.000} & 0.903{\tiny $\pm$.002} \\
+LCM (20/80) & 0.893{\tiny $\pm$.0001} & 1.000{\tiny $\pm$.000} & 0.210{\tiny $\pm$.003} & 0.787{\tiny $\pm$.003} & 0.000{\tiny $\pm$.000} & 0.829{\tiny $\pm$.002} & 1.000{\tiny $\pm$.000} & 0.905{\tiny $\pm$.001} \\
+\bottomrule
+\end{tabular}
+}
+\end{sidewaystable}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{sidewaystable}[p]
+\centering
+\caption{Optimal mixture of synthetic and simulated data for LCM training, evaluated on the out-of-distribution semi-synthetic test collection \(f\)\texttt{MRI}. Reported are mean ($\pm$ standard deviation) values across multiple runs.}
+\label{app:mix-sim-fmri-results}
+\small
+
+\textbf{Test Set:} Out-of-Distribution (Semi-Synthetic)
+\vspace{0.5em}
+
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Test Data} & \textbf{Lags} & \textbf{Variables} & \textbf{Func. Dep.} & \textbf{\# Samples} & \textbf{\# Datasets} \\
+\midrule
+\(f\)MRI & 1 & 5,10 & NL & 200-2400 & 2 \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+\hfill
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Max epochs & 100 \\
+Patience & \textbf{20} \\
+Learning rate \(lr\) & \(1\text{e-}4\) \\
+\(d_{model}\) & 256 \\
+\(n_{heads}\) & 2 \\
+\(n_{blocks}\) & 1 \\
+\(d_{ff}\) & 256 \\
+Dropout & \textbf{0.05} \\
+\(L_{max}\) & 500 \\
+Training Aids & CI, CR \\
+Total params & 1.01M \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+
+\vspace{1em}
+
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{
+l
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+}
+\toprule
+\textbf{Model (Synth/Sim \%)} & $\mathbf{\text{AUC}_{mean}}$ & $\mathbf{\text{TPR}_{mean}}$ & $\mathbf{\text{FPR}_{mean}}$ & $\mathbf{\text{TNR}_{mean}}$ & $\mathbf{\text{FNR}_{mean}}$ & $\mathbf{\text{Precision}_{mean}}$ & $\mathbf{\text{Recall}_{mean}}$ & $\mathbf{\text{F1}_{mean}}$ \\
+\midrule
+LCM (100/0) & 0.745{\tiny $\pm$.005} & 0.927{\tiny $\pm$.002} & 0.436{\tiny $\pm$.001} & 0.563{\tiny $\pm$.010} & 0.070{\tiny $\pm$.002} & 0.733{\tiny $\pm$.006} & 0.927{\tiny $\pm$.002} & 0.795{\tiny $\pm$.002} \\
+LCM (80/20) & 0.869{\tiny $\pm$.002} & 1.000{\tiny $\pm$.000} & 0.269{\tiny $\pm$.005} & 0.739{\tiny $\pm$.005} & 0.000{\tiny $\pm$.000} & 0.803{\tiny $\pm$.003} & 1.000{\tiny $\pm$.000} & 0.888{\tiny $\pm$.002} \\
+LCM (50/50) & 0.888{\tiny $\pm$.002} & 0.979{\tiny $\pm$.002} & 0.20{\tiny $\pm$.003} & 0.795{\tiny $\pm$.003} & 0.020{\tiny $\pm$.002} & 0.832{\tiny $\pm$.002} & 0.979{\tiny $\pm$.002} & 0.898{\tiny $\pm$.001} \\
+LCM (20/80) & 0.894{\tiny $\pm$.0001} & 1.000{\tiny $\pm$.000} & 0.210{\tiny $\pm$.002} & 0.788{\tiny $\pm$.002} & 0.000{\tiny $\pm$.000} & 0.829{\tiny $\pm$.001} & 1.000{\tiny $\pm$.000} & 0.905{\tiny $\pm$.001} \\
+\bottomrule
+\end{tabular}
+}
+\end{sidewaystable}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{sidewaystable}[p]
+\centering
+\caption{Optimal mixture of synthetic and simulated data for LCM training, evaluated on the out-of-distribution semi-synthetic test collection \texttt{Kuramoto5}. Reported are mean ($\pm$ standard deviation) values across multiple runs.}
+\label{app:mix-sim-kuramoto5-results}
+\small
+
+\textbf{Test Set:} Out-of-Distribution (Semi-Synthetic)
+\vspace{0.5em}
+
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Test Data} & \textbf{Lags} & \textbf{Variables} & \textbf{Func. Dep.} & \textbf{Edge Prob.} & \textbf{\# Samples} & \textbf{\# Datasets} \\
+\midrule
+Kuramoto5 & 1 & 5 & NL & -- & 500 & 1000 Models \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+\hfill
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Max epochs & 100 \\
+Patience & \textbf{20} \\
+Learning rate \(lr\) & \(1\text{e-}4\) \\
+\(d_{model}\) & 256 \\
+\(n_{heads}\) & 2 \\
+\(n_{blocks}\) & 1 \\
+\(d_{ff}\) & 256 \\
+Dropout & \textbf{0.05} \\
+\(L_{max}\) & 500 \\
+Training Aids & CI, CR \\
+Total params & 1.01M \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+
+\vspace{1em}
+
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{
+l
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+}
+\toprule
+\textbf{Model (Synth/Sim \%)} & $\mathbf{\text{AUC}_{mean}}$ & $\mathbf{\text{TPR}_{mean}}$ & $\mathbf{\text{FPR}_{mean}}$ & $\mathbf{\text{TNR}_{mean}}$ & $\mathbf{\text{FNR}_{mean}}$ & $\mathbf{\text{Precision}_{mean}}$ & $\mathbf{\text{Recall}_{mean}}$ & $\mathbf{\text{F1}_{mean}}$ \\
+\midrule
+LCM (100/0) & 0.629{\tiny $\pm$.000} & 0.959{\tiny $\pm$.000} & 0.700{\tiny $\pm$.001} & 0.290{\tiny $\pm$.004} & 0.040{\tiny $\pm$.000} & 0.600{\tiny $\pm$.000} & 0.959{\tiny $\pm$.000} & 0.729{\tiny $\pm$.000} \\
+LCM (80/20) & 0.939{\tiny $\pm$.000} & 0.998{\tiny $\pm$.000} & 0.110{\tiny $\pm$.000} & 0.881{\tiny $\pm$.001} & 0.000{\tiny $\pm$.000} & 0.895{\tiny $\pm$.000} & 0.998{\tiny $\pm$.000} & 0.943{\tiny $\pm$.000} \\
+LCM (50/50) & 0.925{\tiny $\pm$.000} & 0.999{\tiny $\pm$.000} & 0.140{\tiny $\pm$.000} & 0.851{\tiny $\pm$.000} & 0.000{\tiny $\pm$.000} & 0.875{\tiny $\pm$.000} & 0.999{\tiny $\pm$.000} & 0.932{\tiny $\pm$.000} \\
+LCM (20/80) & 0.872{\tiny $\pm$.000} & 1.000{\tiny $\pm$.000} & 0.250{\tiny $\pm$.000} & 0.744{\tiny $\pm$.000} & 0.000{\tiny $\pm$.000} & 0.802{\tiny $\pm$.000} & 1.000{\tiny $\pm$.000} & 0.880{\tiny $\pm$.000} \\
+\bottomrule
+\end{tabular}
+}
+\end{sidewaystable}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{sidewaystable}[htbp]
+\centering
+\scriptsize
+\caption{Significance of AUC Differences between model variants (\texttt{Kuramoto5}): Reported are mean AUCs ($\pm$ standard deviation), raw p-values, and significance after correction.}
+\label{app:mix-sim-kuramoto5-significance}
+\begin{tabular}{llcccc}
+\toprule
+\textbf{Model A} & \textbf{Model B} & $\mathbf{\text{AUC}_A^{mean}}$ & $\mathbf{\text{AUC}_B^{mean}}$ & $\mathbf{p\text{-}value_{raw}}$ & \textbf{Significant After Correction} \\
+\midrule
+LCM (100/0) & LCM (80/20) & 0.629 {\tiny $\pm$ 0.000} & 0.939 {\tiny $\pm$ 0.000} & 7.37e$^{-165}$ & Yes \\
+LCM (100/0) & LCM (50/50) & 0.629 {\tiny $\pm$ 0.000} & 0.925 {\tiny $\pm$ 0.000} & 9.63e$^{-165}$ & Yes \\
+LCM (100/0) & LCM (20/80) & 0.629 {\tiny $\pm$ 0.000} & 0.872 {\tiny $\pm$ 0.000} & 2.90e$^{-159}$ & Yes \\
+LCM (80/20) & LCM (50/50) & 0.939 {\tiny $\pm$ 0.000} & 0.925 {\tiny $\pm$ 0.000} & 5.25e$^{-28}$ & Yes \\
+LCM (80/20) & LCM (20/80) & 0.939 {\tiny $\pm$ 0.000} & 0.872 {\tiny $\pm$ 0.000} & 1.58e$^{-157}$ & Yes \\
+LCM (50/50) & LCM (20/80) & 0.925 {\tiny $\pm$ 0.000} & 0.872 {\tiny $\pm$ 0.000} & 2.25e$^{-126}$ & No \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{sidewaystable}[p]
+\centering
+\caption{Optimal mixture of synthetic and simulated data for LCM training, evaluated on the out-of-distribution semi-synthetic test collection (\texttt{Kuramoto10}). Reported are mean ($\pm$ standard deviation) values across multiple runs.}
+\label{app:mix-sim-kuramoto-results}
+\small
+
+\textbf{Test Set:} Out-of-Distribution (Semi-Synthetic)
+\vspace{0.5em}
+
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Test Data} & \textbf{Lags} & \textbf{Variables} & \textbf{Func. Dep.} & \textbf{Edge Prob.} & \textbf{\# Samples} & \textbf{\# Datasets} \\
+\midrule
+Kuramoto10 & 1 & 10 & NL & -- & 500 & 1000 Models \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+\hfill
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Max epochs & 100 \\
+Patience & \textbf{20} \\
+Learning rate \(lr\) & \(1\text{e-}4\) \\
+\(d_{model}\) & 256 \\
+\(n_{heads}\) & 2 \\
+\(n_{blocks}\) & 1 \\
+\(d_{ff}\) & 256 \\
+Dropout & \textbf{0.05} \\
+\(L_{max}\) & 500 \\
+Training Aids & CI, CR \\
+Total params & 1.01M \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+
+\vspace{1em}
+
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{
+l
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+S[table-format=1.3]
+}
+\toprule
+\textbf{Model (Synth/Sim \%)} & $\mathbf{\text{AUC}_{mean}}$ & $\mathbf{\text{TPR}_{mean}}$ & $\mathbf{\text{FPR}_{mean}}$ & $\mathbf{\text{TNR}_{mean}}$ & $\mathbf{\text{FNR}_{mean}}$ & $\mathbf{\text{Precision}_{mean}}$ & $\mathbf{\text{Recall}_{mean}}$ & $\mathbf{\text{F1}_{mean}}$ \\
+\midrule
+LCM (100/0) & 0.652{\tiny $\pm$.000} & 0.914{\tiny $\pm$.000} & 0.609{\tiny $\pm$.000} & 0.390{\tiny $\pm$.000} & 0.080{\tiny $\pm$.000} & 0.635{\tiny $\pm$.000} & 0.914{\tiny $\pm$.000} & 0.724{\tiny $\pm$.000} \\
+LCM (80/20) & 0.903{\tiny $\pm$.000} & 0.959{\tiny $\pm$.000} & 0.151{\tiny $\pm$.000} & 0.848{\tiny $\pm$.000} & 0.040{\tiny $\pm$.000} & 0.865{\tiny $\pm$.000} & 0.959{\tiny $\pm$.000} & 0.907{\tiny $\pm$.000} \\
+LCM (50/50) & 0.920{\tiny $\pm$.000} & 0.998{\tiny $\pm$.000} & 0.157{\tiny $\pm$.000} & 0.842{\tiny $\pm$.000} & 0.001{\tiny $\pm$.000} & 0.865{\tiny $\pm$.000} & 0.998{\tiny $\pm$.000} & 0.927{\tiny $\pm$.000} \\
+LCM (20/80) & 0.922{\tiny $\pm$.000} & 0.997{\tiny $\pm$.000} & 0.152{\tiny $\pm$.000} & 0.847{\tiny $\pm$.000} & 0.002{\tiny $\pm$.000} & 0.868{\tiny $\pm$.000} & 0.997{\tiny $\pm$.000} & 0.928{\tiny $\pm$.000} \\
+\bottomrule
+\end{tabular}
+}
+\end{sidewaystable}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\begin{sidewaystable}[htbp]
+\centering
+\scriptsize
+\caption{Optimal mixture of synthetic and simulated for LCM training, evaluated on the out-of-distribution semi-synthetic test collection \texttt{Kuramoto10}.  Reported are mean AUCs ($\pm$ standard deviation), raw p-values, and significance after correction.}
+\label{app:mix-sim-kuramoto10-significance}
+\begin{tabular}{llcccc}
+\toprule
+\textbf{Model A} & \textbf{Model B} & $\mathbf{\text{AUC}_A^{mean}}$ & $\mathbf{\text{AUC}_B^{mean}}$ & $\mathbf{p\text{-}value_{raw}}$ & \textbf{Significant After Correction} \\
+\midrule
+LCM (100/0) & LCM (80/20) & 0.652 {\tiny $\pm$ 0.000} & 0.903 {\tiny $\pm$ 0.000} & 7.78e$^{-163}$ & Yes \\
+LCM (100/0) & LCM (50/50) & 0.652 {\tiny $\pm$ 0.000} & 0.920 {\tiny $\pm$ 0.000} & 6.38e$^{-163}$ & Yes \\
+LCM (100/0) & LCM (20/80) & 0.652 {\tiny $\pm$ 0.000} & 0.922 {\tiny $\pm$ 0.000} & 6.40e$^{-163}$ & Yes \\
+LCM (80/20) & LCM (50/50) & 0.903 {\tiny $\pm$ 0.000} & 0.920 {\tiny $\pm$ 0.000} & 4.41e$^{-50}$ & Yes \\
+LCM (80/20) & LCM (20/80) & 0.903 {\tiny $\pm$ 0.000} & 0.922 {\tiny $\pm$ 0.000} & 3.92e$^{-63}$ & Yes \\
+LCM (50/50) & LCM (20/80) & 0.920 {\tiny $\pm$ 0.000} & 0.922 {\tiny $\pm$ 0.000} & 4.07e$^{-02}$ & No \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{sidewaystable}[htbp]
+\centering
+\caption{Optimal mixture of synthetic and simulated for LCM training, evaluated on the out-of-distribution simulated data collection \texttt{AirQualityMS}.}
+\label{app:mix-sim-airqualityms-results}
+\begin{tabular}{lcccccccc}
+\toprule
+\textbf{Model} & \textbf{AUC} & \textbf{TPR} & \textbf{FPR} & \textbf{TNR} & \textbf{FNR} & \textbf{Precision} & \textbf{Recall} & \textbf{F1} \\
+\midrule
+LCM synth/sim \% 100/0 & 0.886$\pm$.000 & 0.801$\pm$.001 & 0.020$\pm$.000 & 0.975$\pm$.000 & 0.198$\pm$.001 & 0.960$\pm$.000 & 0.800$\pm$.001 & 0.850$\pm$.001 \\
+LCM synth/sim \% 80/20 & 0.957$\pm$.000 & 0.955$\pm$.004 & 0.040$\pm$.000 & 0.959$\pm$.000 & 0.040$\pm$.004 & 0.959$\pm$.000 & 0.955$\pm$.004 & 0.954$\pm$.002 \\
+LCM synth/sim \% 50/50 & \textbf{0.961$\pm$.000} & \textbf{0.975$\pm$.001} & 0.050$\pm$.000 & 0.947$\pm$.000 & \textbf{0.002$\pm$.001} & 0.949$\pm$.000 & 0.975$\pm$.001 & \textbf{0.960$\pm$.001} \\
+LCM synth/sim \% 20/80 & 0.951$\pm$.000 & 0.959$\pm$.002 & 0.050$\pm$.000 & 0.943$\pm$.000 & 0.004$\pm$.002 & 0.944$\pm$.000 & 0.959$\pm$.002 & 0.949$\pm$.001 \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\begin{sidewaystable}[htbp]
+%\centering
+%\caption{Significance of AUC differences between training mixture variants (\texttt{AirQualityMS}). Reported are mean ($\pm$ standard deviation) values across multiple runs.}
+%\label{app:mix-sim-airqualityms-results}
+%\begin{tabular}{lcccccc}
+%\toprule
+%\textbf{Model A} & \textbf{Model B} & \textbf{AUC\textsubscript{A}} & \textbf{AUC\textsubscript{B}} & \textbf{p-value} & \textbf{Significant (corr.)} \\
+%\midrule
+%100/0 & 80/20 & 0.886 & 0.957 & 0.006483 & Yes \\
+%100/0 & 50/50 & 0.886 & 0.961 & 0.002429 & Yes \\
+%100/0 & 20/80 & 0.886 & 0.951 & 0.005631 & Yes \\
+%80/20 & 50/50 & 0.957 & 0.961 & 0.146531 & No \\
+%80/20 & 20/80 & 0.957 & 0.951 & 0.074256 & No \\
+%50/50 & 20/80 & 0.961 & 0.951 & 0.293768 & No \\
+%\bottomrule
+%\end{tabular}
+%\end{sidewaystable}
+
+\begin{sidewaystable}[htbp]
+\centering
+\scriptsize
+\caption{Significance of AUC differences between training mixture variants (\texttt{AirQualityMS}). Reported are mean ($\pm$ standard deviation) values across multiple runs.}
+\label{app:mix-sim-airqualityms-significance}
+\begin{tabular}{llcccc}
+\toprule
+\textbf{Model A} & \textbf{Model B} & $\mathbf{\text{AUC}_A^{mean}}$ & $\mathbf{\text{AUC}_B^{mean}}$ & $\mathbf{p\text{-}value_{raw}}$ & \textbf{Significant After Correction} \\
+\midrule
+LCM (100/0) & LCM (80/20) & 0.886 {\tiny $\pm$ 0.000} & 0.957 {\tiny $\pm$ 0.000} & 6.48e$^{-03}$ & Yes \\
+LCM (100/0) & LCM (50/50) & 0.886 {\tiny $\pm$ 0.000} & 0.961 {\tiny $\pm$ 0.000} & 2.43e$^{-03}$ & Yes \\
+LCM (100/0) & LCM (20/80) & 0.886 {\tiny $\pm$ 0.000} & 0.951 {\tiny $\pm$ 0.000} & 5.63e$^{-03}$ & Yes \\
+LCM (80/20) & LCM (50/50) & 0.957 {\tiny $\pm$ 0.000} & 0.961 {\tiny $\pm$ 0.000} & 1.47e$^{-01}$ & No \\
+LCM (80/20) & LCM (20/80) & 0.957 {\tiny $\pm$ 0.000} & 0.951 {\tiny $\pm$ 0.000} & 7.43e$^{-02}$ & No \\
+LCM (50/50) & LCM (20/80) & 0.961 {\tiny $\pm$ 0.000} & 0.951 {\tiny $\pm$ 0.000} & 2.94e$^{-01}$ & No \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{sidewaystable}[htbp]
+\centering
+\vspace{1em}
+\includegraphics[width=\textwidth]{images/runtimes/running_times_synth_230k.png}
+\caption{Running times on the \texttt{Synth\_230K} data collection (in-distribution, synthetic): Mean, standard deviation, and range across model variants and baselines.}
+\label{app:synth230k-runtimes}
+\vspace{0.5em}
+\end{sidewaystable}
+
+\begin{sidewaystable}[htbp]
+\centering
+\vspace{1em}
+\includegraphics[width=\textwidth]{images/runtimes/running_times_S_joint.png}
+\caption{Running times on the \texttt{S\_joint} data collection (synthetic): Mean, standard deviation, and range across model variants and classical baselines.}
+\label{app:s-joint-runtimes}
+\vspace{1em}
+\end{sidewaystable}
+
+\begin{sidewaystable}[htbp]
+\centering
+\vspace{1em}
+\includegraphics[width=\textwidth]{images/runtimes/running_times_fmri_10.png}
+\caption{Running times on the \(f\)MRI data collection (semi-synthetic): Mean, standard deviation, and range across model variants and classical baselines.}
+\label{app:fmri-runtimes}
+\vspace{1em}
+\end{sidewaystable}
+
+\begin{sidewaystable}[htbp]
+\centering
+\vspace{1em}
+\includegraphics[width=\textwidth]{images/runtimes/running_times_kuramoto_10V_1L.png}
+\caption{Running times on the \texttt{Kuramoto10} data collection (semi-synthetic): Mean, standard deviation, and range across model variants and classical baselines.}
+\label{app:kuramoto-10-runtimes}
+\vspace{1em}
+\end{sidewaystable}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%% Results - Large Scale LCMs %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{sidewaystable}[p]
+\centering
+\scriptsize
+\caption{Large-scale results (Informer model) on the \texttt{S\_Joint} data collection (synthetic). Reported are mean ($\pm$ standard deviation) values across multiple runs.}
+\label{app:s-joint-largescale}
+
+% Dataset Info
+\textbf{Test Set:} S\_Joint (partially in-distribution, synthetic, holdout)
+\vspace{0.5em}
+
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Test Data} & \textbf{Lags} & \textbf{Variables} & \textbf{Func. Dep.} & Edge Prob. & \# Samples & \# Datasets \\
+\midrule
+S\_Joint & 1-3 & 3-5 & L, NL & 0.2-0.8 & 500 & 2000 \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+\hfill
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Parameter} & \textbf{Values (4 Models)} \\
+\midrule
+Max epochs & 100 \\
+Patience & 20 \\
+Learning rate & 1e-4 \\
+$d_{model}$ & 256, 512, 512, 1024 \\
+$n_{heads}$ & 4, 4, 4, 8 \\
+$n_{blocks}$ & 4, 4, 4, 8 \\
+$d_{ff}$ & 256, 512, 1024, 1024 \\
+Dropout & 0.05 \\
+$L_{max}/V_{mas}, \ell_{max}$ & 500 / 12 / 3 \\
+Training Aids & CI, CR \\
+Total params & 2.5M, 9.4M, 12.2M, 24M \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+
+\vspace{1em}
+
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccccccc}
+\toprule
+\textbf{Model} & AUC$_{mean}$ & TPR$_{mean}$ & FPR$_{mean}$ & TNR$_{mean}$ & FNR$_{mean}$ & Precision$_{mean}$ & Recall$_{mean}$ & F1$_{mean}$ \\
+\midrule
+LCM 2.5M & 0.957 {\tiny $\pm$ 0.000} & 0.936 {\tiny $\pm$ 0.000} & 0.020 {\tiny $\pm$ 0.000} & 0.978 {\tiny $\pm$ 0.000} & 0.063 {\tiny $\pm$ 0.000} & 0.944 {\tiny $\pm$ 0.000} & 0.936 {\tiny $\pm$ 0.000} & 0.936 {\tiny $\pm$ 0.000} \\
+LCM 9.4M & 0.962 {\tiny $\pm$ 0.000} & 0.945 {\tiny $\pm$ 0.000} & 0.020 {\tiny $\pm$ 0.000} & 0.979 {\tiny $\pm$ 0.000} & 0.054 {\tiny $\pm$ 0.000} & 0.953 {\tiny $\pm$ 0.000} & 0.945 {\tiny $\pm$ 0.000} & 0.945 {\tiny $\pm$ 0.000} \\
+LCM 12.2M & 0.964 {\tiny $\pm$ 0.000} & 0.951 {\tiny $\pm$ 0.000} & 0.023 {\tiny $\pm$ 0.000} & 0.976 {\tiny $\pm$ 0.000} & 0.048 {\tiny $\pm$ 0.000} & 0.951 {\tiny $\pm$ 0.001} & 0.951 {\tiny $\pm$ 0.001} & 0.948 {\tiny $\pm$ 0.001} \\
+LCM 24M & 0.936 {\tiny $\pm$ 0.000} & 0.888 {\tiny $\pm$ 0.000} & 0.010 {\tiny $\pm$ 0.000} & 0.983 {\tiny $\pm$ 0.000} & 0.111 {\tiny $\pm$ 0.000} & 0.922 {\tiny $\pm$ 0.000} & 0.888 {\tiny $\pm$ 0.000} & 0.898 {\tiny $\pm$ 0.000} \\
+CP (Stein et al.) & 0.915 {\tiny $\pm$ 0.000} & 0.894 {\tiny $\pm$ 0.000} & 0.060 {\tiny $\pm$ 0.000} & 0.935 {\tiny $\pm$ 0.000} & 0.105 {\tiny $\pm$ 0.000} & 0.878 {\tiny $\pm$ 0.000} & 0.894 {\tiny $\pm$ 0.000} & 0.882 {\tiny $\pm$ 0.000} \\
+PCMCI & 0.672 {\tiny $\pm$ 0.000} & 0.685 {\tiny $\pm$ 0.000} & 0.655 {\tiny $\pm$ 0.000} & 0.344 {\tiny $\pm$ 0.000} & 0.020 {\tiny $\pm$ 0.000} & 0.427 {\tiny $\pm$ 0.000} & 0.685 {\tiny $\pm$ 0.000} & 0.520 {\tiny $\pm$ 0.000} \\
+DYNOTEARS & 0.540 {\tiny $\pm$ 0.000} & 0.273 {\tiny $\pm$ 0.000} & 0.191 {\tiny $\pm$ 0.000} & 0.808 {\tiny $\pm$ 0.000} & 0.726 {\tiny $\pm$ 0.000} & 0.330 {\tiny $\pm$ 0.000} & 0.273 {\tiny $\pm$ 0.000} & 0.290 {\tiny $\pm$ 0.000} \\
+VARLINGAM & 0.801 {\tiny $\pm$ 0.000} & 0.940 {\tiny $\pm$ 0.000} & 0.330 {\tiny $\pm$ 0.000} & 0.663 {\tiny $\pm$ 0.000} & 0.059 {\tiny $\pm$ 0.000} & 0.725 {\tiny $\pm$ 0.000} & 0.940 {\tiny $\pm$ 0.000} & 0.816 {\tiny $\pm$ 0.000} \\
+\bottomrule
+\end{tabular}
+}
+\end{sidewaystable}
+
+\begin{sidewaystable}[p]
+\centering
+\scriptsize
+\caption{Significance of AUC differences between large-scale LCMs (\texttt{S\_Joint}). Reported are mean AUCs ($\pm$ standard deviation), raw p-values, and significance after correction.}
+\label{app:s-joint-largescale-significance}
+
+\begin{tabular}{l l c c c c}
+\toprule
+\textbf{Model A} & \textbf{Model B} & \textbf{AUC\_A$_{mean}$} & \textbf{AUC\_B$_{mean}$} & \textbf{p-value (raw)} & \textbf{Significant after correction} \\
+\midrule
+LCM 2.5M & LCM 9.4M & 0.957$\pm$.103 & 0.962$\pm$.009 & 7.33e-08 & Yes \\
+LCM 2.5M & LCM 12.2M & 0.957$\pm$.103 & 0.936$\pm$.009 & 0.9485 & No \\
+LCM 2.5M & LCM 24M & 0.957$\pm$.103 & 0.934$\pm$.136 & 2.55e-14 & Yes \\
+LCM 2.5M & PCMCI & 0.957$\pm$.103 & 0.947$\pm$.188 & 6.59e-22 & Yes \\
+LCM 2.5M & DYNOTEARS & 0.957$\pm$.097 & 0.541$\pm$.018 & 1.24e-167 & Yes \\
+LCM 2.5M & VARLINGAM & 0.957$\pm$.0971 & 0.802$\pm$.122 & 3.45e-166 & Yes \\
+LCM 9.4M & LCM 12.2M & 0.962$\pm$.0956 & 0.967$\pm$.0929 & 1.67e-10 & Yes \\
+LCM 9.4M & LCM 24M & 0.962$\pm$.0956 & 0.935$\pm$.136 & 0.0252 & No \\
+LCM 9.4M & PCMCI & 0.962$\pm$.0966 & 0.947$\pm$.133 & 3.76e-19 & Yes \\
+LCM 9.4M & DYNOTEARS & 0.964$\pm$.0929 & 0.541$\pm$.188 & 9.38e-18 & Yes \\
+LCM 9.4M & VARLINGAM & 0.964$\pm$.0929 & 0.802$\pm$.121 & 1.82e-166 & Yes \\
+LCM 12.2M & LCM 24M & 0.963$\pm$.0929 & 0.935$\pm$.136 & 0.00010 & Yes \\
+LCM 12.2M & PCMCI & 0.963$\pm$.092 & 0.947$\pm$.133 & 3.93e-23 & Yes \\
+LCM 12.2M & DYNOTEARS & 0.966$\pm$.088 & 0.541$\pm$.188 & 2.49e-168 & Yes \\
+LCM 12.2M & VARLINGAM & 0.966$\pm$.088 & 0.802$\pm$.122 & 5.52e-169 & Yes \\
+LCM 24M & PCMCI & 0.934$\pm$.136 & 0.946$\pm$.133 & 3.09e-31 & Yes \\
+LCM 24M & DYNOTEARS & 0.942$\pm$.120 & 0.541$\pm$.188 & 1.17e-164 & Yes \\
+LCM 24M & VARLINGAM & 0.942$\pm$.120 & 0.802$\pm$.121 & 5.25e-150 & Yes \\
+PCMCI & DYNOTEARS & 0.957$\pm$.119 & 0.541$\pm$.188 & 9.60e-166 & Yes \\
+PCMCI & VARLINGAM & 0.956$\pm$.119 & 0.802$\pm$.122 & 2.29e-151 & Yes \\
+DYNOTEARS & VARLINGAM & 0.541$\pm$.188 & 0.802$\pm$.122 & 1.12e-138 & Yes \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{sidewaystable}[p]
+\centering
+\scriptsize
+\caption{Large-scale results (Informer model) on the \texttt{Synth\_230k} data collection (in-distribution, synthetic, holdout test set). Reported are mean ($\pm$ standard deviation) values across multiple runs.}
+\label{app:synth-230k-largescale}
+
+\begin{tabular}{lcccccccc}
+\toprule
+\textbf{Model} & $\mathbf{\text{AUC}_{mean}}$ & $\mathbf{\text{TPR}_{mean}}$ & $\mathbf{\text{FPR}_{mean}}$ & $\mathbf{\text{TNR}_{mean}}$ & $\mathbf{\text{FNR}_{mean}}$ & $\mathbf{\text{Precision}_{mean}}$ & $\mathbf{\text{Recall}_{mean}}$ & $\mathbf{\text{F1}_{mean}}$ \\
+\midrule
+LCM 2.5M & 0.792$\pm$.000 & 0.711$\pm$.000 & 0.127$\pm$.000 & 0.872$\pm$.000 & 0.289$\pm$.000 & 0.819$\pm$.000 & 0.710$\pm$.000 & 0.740$\pm$.000 \\
+LCM 9.4M & 0.789$\pm$.000 & 0.684$\pm$.000 & 0.105$\pm$.000 & 0.895$\pm$.000 & 0.316$\pm$.000 & 0.822$\pm$.000 & 0.683$\pm$.000 & 0.729$\pm$.000 \\
+LCM 12.2M & 0.793$\pm$.000 & 0.693$\pm$.000 & 0.106$\pm$.000 & 0.893$\pm$.000 & 0.306$\pm$.000 & 0.830$\pm$.000 & 0.693$\pm$.000 & 0.736$\pm$.000 \\
+LCM 24M & 0.771$\pm$.000 & 0.693$\pm$.000 & 0.149$\pm$.000 & 0.850$\pm$.000 & 0.306$\pm$.000 & 0.787$\pm$.000 & 0.693$\pm$.000 & 0.717$\pm$.000 \\
+PCMCI & 0.801$\pm$.000 & 0.760$\pm$.000 & 0.402$\pm$.000 & 0.597$\pm$.000 & 0.233$\pm$.000 & 0.648$\pm$.000 & 0.760$\pm$.000 & 0.677$\pm$.000 \\
+DYNOTEARS & 0.569$\pm$.000 & 0.189$\pm$.000 & 0.052$\pm$.000 & 0.947$\pm$.000 & 0.810$\pm$.000 & 0.504$\pm$.000 & 0.189$\pm$.000 & 0.254$\pm$.000 \\
+VARLINGAM & 0.789$\pm$.000 & 0.694$\pm$.000 & 0.115$\pm$.000 & 0.886$\pm$.000 & 0.305$\pm$.000 & 0.815$\pm$.000 & 0.694$\pm$.000 & 0.733$\pm$.000 \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+\begin{sidewaystable}[p]
+\centering
+\scriptsize
+\caption{Significance of AUC Differences between large-scale LCMs (\texttt{Synth\_230k}). Reported are mean AUCs ($\pm$ standard deviation), raw p-values, and significance after correction.}
+\label{app:synth-230k-largescale-significance}
+
+\begin{tabular}{l l c c c c}
+\toprule
+\textbf{Model A} & \textbf{Model B} & \textbf{AUC\_A$_{mean}$} & \textbf{AUC\_B$_{mean}$} & \textbf{p-value (raw)} & \textbf{Significant after correction} \\
+\midrule
+LCM 2.5M & LCM 9.4M & 0.792$\pm$.148 & 0.789$\pm$.0148 & 9.63e-08 & Yes \\
+LCM 2.5M & LCM 12.2M & 0.792$\pm$.148 & 0.793$\pm$.0145 & 2.73e-15 & Yes \\
+LCM 2.5M & LCM 24M & 0.792$\pm$.148 & 0.772$\pm$.147 & 1.69e-45 & Yes \\
+LCM 2.5M & PCMCI & 0.792$\pm$.148 & 0.801$\pm$.181 & 1.02e-11 & Yes \\
+LCM 2.5M & DYNOTEARS & 0.792$\pm$.148 & 0.567$\pm$.127 & 4.42e-277 & Yes \\
+LCM 2.5M & VARLINGAM & 0.792$\pm$.148 & 0.790$\pm$.141 & 0.0102 & No \\
+LCM 2.5M & LCM 12.2M & 0.792$\pm$.148 & 0.793$\pm$.146 & 0.0001 & Yes \\
+LCM 9.4M & LCM 24M & 0.789$\pm$.148 & 0.772$\pm$.147 & 8.91e-49 & Yes \\
+LCM 9.4M & PCMCI & 0.789$\pm$.148 & 0.801$\pm$.181 & 5.49e-14 & Yes \\
+LCM 9.4M & DYNOTEARS & 0.789$\pm$.148 & 0.569$\pm$.127 & 5.79e-275 & Yes \\
+LCM 9.4M & VARLINGAM & 0.789$\pm$.148 & 0.790$\pm$.141 & 0.0039 & No \\
+LCM 12.2M & LCM 24M & 0.793$\pm$.146 & 0.772$\pm$.147 & 1.41e-55 & Yes \\
+LCM 12.2M & PCMCI & 0.793$\pm$.146 & 0.801$\pm$.181 & 1.95e-11 & Yes \\
+LCM 12.2M & DYNOTEARS & 0.793$\pm$.146 & 0.569$\pm$.127 & 4.30e-279 & Yes \\
+LCM 12.2M & VARLINGAM & 0.793$\pm$.146 & 0.790$\pm$.141 & 4.61e-06 & Yes \\
+LCM 24M & PCMCI & 0.772$\pm$.147 & 0.801$\pm$.181 & 6.38e-31 & Yes \\
+LCM 24M & DYNOTEARS & 0.772$\pm$.147 & 0.569$\pm$.127 & 3.35e-263 & Yes \\
+LCM 24M & VARLINGAM & 0.772$\pm$.147 & 0.790$\pm$.141 & 3.10e-13 & Yes \\
+PCMCI & DYNOTEARS & 0.801$\pm$.181 & 0.569$\pm$.127 & 7.80e-237 & Yes \\
+PCMCI & VARLINGAM & 0.801$\pm$.181 & 0.790$\pm$.141 & 1.53e-34 & Yes \\
+DYNOTEARS & VARLINGAM & 0.569$\pm$.127 & 0.590$\pm$.141 & 1.36e-277 & Yes \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{sidewaystable}[p]
+\centering
+\scriptsize
+\caption{Large-scale results (Informer Model) on the \texttt{Synth\_230k\_Sim\_45k} dataset. (in-distribution, mixed, holdout test set). Reported are mean ($\pm$ standard deviation) values across multiple runs.}
+\label{app:synth-230k-sim-45k-largescale}
+
+\begin{tabular}{lcccccccc}
+\toprule
+\textbf{Model} & $\mathbf{\text{AUC}_{mean}}$ & $\mathbf{\text{TPR}_{mean}}$ & $\mathbf{\text{FPR}_{mean}}$ & $\mathbf{\text{TNR}_{mean}}$ & $\mathbf{\text{FNR}_{mean}}$ & $\mathbf{\text{Precision}_{mean}}$ & $\mathbf{\text{Recall}_{mean}}$ & $\mathbf{\text{F1}_{mean}}$ \\
+\midrule
+LCM 2.5M & 0.799$\pm$.000 & 0.752$\pm$.000 & 0.155$\pm$.000 & 0.845$\pm$.000 & 0.248$\pm$.000 & 0.818$\pm$.000 & 0.752$\pm$.000 & 0.761$\pm$.000 \\
+LCM 9.4M & 0.800$\pm$.000 & 0.727$\pm$.000 & 0.133$\pm$.000 & 0.866$\pm$.000 & 0.272$\pm$.000 & 0.823$\pm$.000 & 0.728$\pm$.000 & 0.752$\pm$.000 \\
+LCM 12.2M & 0.800$\pm$.000 & 0.729$\pm$.000 & 0.136$\pm$.000 & 0.863$\pm$.000 & 0.271$\pm$.000 & 0.822$\pm$.000 & 0.729$\pm$.000 & 0.751$\pm$.000 \\
+LCM 24M & 0.800$\pm$.000 & 0.733$\pm$.000 & 0.191$\pm$.000 & 0.809$\pm$.000 & 0.267$\pm$.000 & 0.777$\pm$.000 & 0.732$\pm$.000 & 0.733$\pm$.000 \\
+PCMCI & 0.783$\pm$.000 & 0.768$\pm$.000 & 0.439$\pm$.000 & 0.560$\pm$.000 & 0.225$\pm$.000 & 0.636$\pm$.000 & 0.769$\pm$.000 & 0.675$\pm$.000 \\
+DYNOTEARS & 0.562$\pm$.000 & 0.179$\pm$.000 & 0.053$\pm$.000 & 0.947$\pm$.000 & 0.821$\pm$.000 & 0.510$\pm$.000 & 0.179$\pm$.000 & 0.245$\pm$.000 \\
+VARLINGAM & 0.773$\pm$.000 & 0.663$\pm$.000 & 0.116$\pm$.000 & 0.883$\pm$.000 & 0.336$\pm$.000 & 0.805$\pm$.000 & 0.663$\pm$.000 & 0.710$\pm$.000 \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+\begin{sidewaystable}[p]
+\centering
+\scriptsize
+\caption{Significance of AUC Differences between large-scale LCMs (\texttt{Synth\_230k\_Sim\_45k}). Reported are mean AUCs ($\pm$ standard deviation), raw p-values, and significance after correction.}
+\label{app:synth-230k-sim-45k-largescale-significance}
+
+\begin{tabular}{llcccc}
+\toprule
+\textbf{Model A} & \textbf{Model B} & $\mathbf{\text{AUC}_A^{mean}}$ & $\mathbf{\text{AUC}_B^{mean}}$ & $\mathbf{p\text{-}value_{raw}}$ & \textbf{Significant After Correction} \\
+\midrule
+LCM2.5M & LCM9.4M & 0.781$\pm$.156 & 0.793$\pm$.147 & 0.2713 & No \\
+LCM2.5M & LCM12.2M & 0.781$\pm$.156 & 0.795$\pm$.157 & 0.4798 & No \\
+LCM2.5M & LCM24M & 0.781$\pm$.156 & 0.783$\pm$.146 & 0.0684 & No \\
+LCM2.5M & PCMCI & 0.781$\pm$.156 & 0.764$\pm$.233 & 0.5091 & No \\
+LCM2.5M & DYNOTEARS & 0.781$\pm$.156 & 0.558$\pm$.146 & 7.33e-14 & Yes \\
+LCM2.5M & VARLINGAM & 0.781$\pm$.156 & 0.771$\pm$.172 & 0.5157 & No \\
+LCM9.4M & LCM24M & 0.793$\pm$.147 & 0.783$\pm$.146 & 0.0045 & No \\
+LCM9.4M & PCMCI & 0.793$\pm$.147 & 0.764$\pm$.233 & 0.6799 & No \\
+LCM9.4M & DYNOTEARS & 0.793$\pm$.147 & 0.558$\pm$.146 & 1.38e-14 & Yes \\
+LCM9.4M & VARLINGAM & 0.793$\pm$.147 & 0.771$\pm$.172 & 0.0496 & No \\
+LCM12.2M & LCM24M & 0.795$\pm$.157 & 0.783$\pm$.146 & 0.0014 & Yes \\
+LCM12.2M & PCMCI & 0.795$\pm$.157 & 0.764$\pm$.233 & 0.8689 & No \\
+LCM12.2M & DYNOTEARS & 0.795$\pm$.157 & 0.558$\pm$.146 & 7.14e-14 & Yes \\
+LCM12.2M & VARLINGAM & 0.795$\pm$.157 & 0.771$\pm$.172 & 0.0898 & No \\
+LCM24M & PCMCI & 0.783$\pm$.146 & 0.764$\pm$.233 & 0.1536 & No \\
+LCM24M & DYNOTEARS & 0.783$\pm$.146 & 0.558$\pm$.146 & 9.12e-16 & Yes \\
+LCM24M & VARLINGAM & 0.783$\pm$.146 & 0.771$\pm$.172 & 0.8683 & No \\
+PCMCI & DYNOTEARS & 0.764$\pm$.233 & 0.558$\pm$.146 & 2.03e-10 & Yes \\
+PCMCI & VARLINGAM & 0.764$\pm$.233 & 0.771$\pm$.172 & 0.1237 & No \\
+DYNOTEARS & VARLINGAM & 0.558$\pm$.146 & 0.771$\pm$.172 & 1.56e-14 & Yes \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{sidewaystable}[p]
+\centering
+\scriptsize
+\caption{Large-scale results (Informer model) on the \texttt{Sim\_45k} data collection (in-distribution, simulated, holdout test set). Reported are mean ($\pm$ standard deviation) values across multiple runs.}
+\label{app:sim45k-largescale}
+
+\begin{tabular}{lcccccccc}
+\toprule
+\textbf{Model} & $\mathbf{\text{AUC}_{mean}}$ & $\mathbf{\text{TPR}_{mean}}$ & $\mathbf{\text{FPR}_{mean}}$ & $\mathbf{\text{TNR}_{mean}}$ & $\mathbf{\text{FNR}_{mean}}$ & $\mathbf{\text{Precision}_{mean}}$ & $\mathbf{\text{Recall}_{mean}}$ & $\mathbf{\text{F1}_{mean}}$ \\
+\midrule
+LCM 2.5M & 0.834$\pm$.000 & 0.945$\pm$.000 & 0.271$\pm$.000 & 0.729$\pm$.000 & 0.050$\pm$.000 & 0.791$\pm$.000 & 0.945$\pm$.000 & 0.852$\pm$.000 \\
+LCM 9.4M & 0.841$\pm$.000 & 0.951$\pm$.000 & 0.270$\pm$.000 & 0.723$\pm$.000 & 0.048$\pm$.000 & 0.793$\pm$.000 & 0.951$\pm$.000 & 0.857$\pm$.000 \\
+LCM 12.2M & 0.839$\pm$.000 & 0.958$\pm$.000 & 0.280$\pm$.000 & 0.712$\pm$.000 & 0.042$\pm$.000 & 0.789$\pm$.000 & 0.958$\pm$.000 & 0.857$\pm$.000 \\
+LCM 24M & 0.778$\pm$.000 & 0.935$\pm$.000 & 0.378$\pm$.000 & 0.623$\pm$.000 & 0.065$\pm$.000 & 0.721$\pm$.000 & 0.935$\pm$.000 & 0.805$\pm$.000 \\
+PCMCI & 0.702$\pm$.000 & 0.803$\pm$.000 & 0.622$\pm$.000 & 0.377$\pm$.000 & 0.170$\pm$.000 & 0.554$\pm$.000 & 0.802$\pm$.000 & 0.646$\pm$.000 \\
+DYNOTEARS & 0.542$\pm$.000 & 0.131$\pm$.000 & 0.040$\pm$.000 & 0.960$\pm$.000 & 0.864$\pm$.000 & 0.517$\pm$.000 & 0.131$\pm$.000 & 0.191$\pm$.000 \\
+VARLINGAM & 0.688$\pm$.000 & 0.496$\pm$.000 & 0.115$\pm$.000 & 0.884$\pm$.000 & 0.499$\pm$.000 & 0.768$\pm$.000 & 0.496$\pm$.000 & 0.582$\pm$.000 \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+
+\begin{sidewaystable}[htbp]
+\centering
+\scriptsize
+\caption{Significance of AUC differences between large-scale LCMs (\texttt{Sim\_45k}). Reported are mean AUCs ($\pm$ standard deviation), raw p-values, and significance after correction.}
+\label{app:sim45k-largescale-significance}
+
+\begin{tabular}{llcccc}
+\toprule
+\textbf{Model A} & \textbf{Model B} & $\mathbf{\text{AUC}_A^{mean}}$ & $\mathbf{\text{AUC}_B^{mean}}$ & $\mathbf{p\text{-}value_{raw}}$ & \textbf{Significant After Correction} \\
+\midrule
+LCM2.5M & LCM9.4M & 0.837$\pm$.119 & 0.841$\pm$.118 & 0.0004 & Yes \\
+LCM2.5M & LCM12.2M & 0.837$\pm$.119 & 0.839$\pm$.117 & 0.8453 & No \\
+LCM2.5M & LCM24M & 0.837$\pm$.119 & 0.770$\pm$.120 & 1.86e-168 & Yes \\
+LCM2.5M & PCMCI & 0.837$\pm$.119 & 0.722$\pm$.158 & 3.74e-172 & Yes \\
+LCM2.5M & DYNOTEARS & 0.837$\pm$.119 & 0.545$\pm$.092 & 2.83e-162 & Yes \\
+LCM2.5M & VARLINGAM & 0.839$\pm$.117 & 0.602$\pm$.132 & 4.18e-132 & Yes \\
+LCM9.4M & LCM24M & 0.841$\pm$.118 & 0.778$\pm$.120 & 1.28e-167 & Yes \\
+LCM9.4M & PCMCI & 0.841$\pm$.118 & 0.722$\pm$.158 & 4.65e-179 & Yes \\
+LCM9.4M & DYNOTEARS & 0.843$\pm$.116 & 0.545$\pm$.092 & 8.60e-163 & Yes \\
+LCM9.4M & VARLINGAM & 0.843$\pm$.116 & 0.692$\pm$.132 & 2.48e-140 & Yes \\
+LCM12.2M & LCM24M & 0.839$\pm$.117 & 0.778$\pm$.120 & 7.84e-172 & Yes \\
+LCM12.2M & PCMCI & 0.839$\pm$.117 & 0.722$\pm$.158 & 2.36e-178 & Yes \\
+LCM12.2M & DYNOTEARS & 0.841$\pm$.115 & 0.545$\pm$.092 & 1.18e-163 & Yes \\
+LCM12.2M & VARLINGAM & 0.841$\pm$.115 & 0.692$\pm$.132 & 1.75e-138 & Yes \\
+LCM24M & PCMCI & 0.770$\pm$.012 & 0.722$\pm$.158 & 5.19e-49 & Yes \\
+LCM24M & DYNOTEARS & 0.781$\pm$.016 & 0.545$\pm$.092 & 9.71e-160 & Yes \\
+LCM24M & VARLINGAM & 0.781$\pm$.116 & 0.692$\pm$.132 & 2.57e-78 & Yes \\
+PCMCI & DYNOTEARS & 0.722$\pm$.016 & 0.543$\pm$.099 & 3.05e-136 & Yes \\
+PCMCI & VARLINGAM & 0.722$\pm$.016 & 0.688$\pm$.141 & 1.55e-28 & Yes \\
+DYNOTEARS & VARLINGAM & 0.543$\pm$.099 & 0.688$\pm$.141 & 6.25e-131 & Yes \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{sidewaystable}[p]
+\centering
+\scriptsize
+\caption{Large-scale results (Informer model) on the \texttt{Sim\_45k} data collection (in-distribution, simulated, holdout test set). Reported are mean ($\pm$ standard deviation) values across multiple runs.}
+\label{app:fmri-largescale}
+\begin{tabular}{lcccccccc}
+\toprule
+\textbf{Model} & $\mathbf{\text{AUC}_{mean}}$ & $\mathbf{\text{TPR}_{mean}}$ & $\mathbf{\text{FPR}_{mean}}$ & $\mathbf{\text{TNR}_{mean}}$ & $\mathbf{\text{FNR}_{mean}}$ & $\mathbf{\text{Precision}_{mean}}$ & $\mathbf{\text{Recall}_{mean}}$ & $\mathbf{\text{F1}_{mean}}$ \\
+\midrule
+LCM 2.5M & 0.945$\pm$.000 & 1.000$\pm$.000 & 0.110$\pm$.001 & 0.891$\pm$.001 & 0.000$\pm$.000 & 0.904$\pm$.002 & 1.000$\pm$.000 & 0.949$\pm$.000 \\
+LCM 9.4M & 0.943$\pm$.001 & 1.000$\pm$.000 & 0.113$\pm$.002 & 0.887$\pm$.002 & 0.000$\pm$.000 & 0.901$\pm$.002 & 1.000$\pm$.000 & 0.947$\pm$.000 \\
+LCM 12.2M & 0.946$\pm$.000 & 1.000$\pm$.000 & 0.103$\pm$.001 & 0.897$\pm$.001 & 0.003$\pm$.000 & 0.901$\pm$.010 & 0.997$\pm$.000 & 0.949$\pm$.000 \\
+LCM 24M & 0.954$\pm$.000 & 0.997$\pm$.000 & 0.084$\pm$.001 & 0.916$\pm$.001 & 0.008$\pm$.000 & 0.925$\pm$.001 & 0.992$\pm$.000 & 0.956$\pm$.000 \\
+CP (Stein et al.) & 0.775$\pm$.001 & 0.681$\pm$.004 & 0.129$\pm$.001 & 0.870$\pm$.001 & 0.318$\pm$.004 & 0.839$\pm$.001 & 0.682$\pm$.004 & 0.742$\pm$.002 \\
+PCMCI & 0.739$\pm$.005 & 0.994$\pm$.001 & 0.982$\pm$.003 & 0.018$\pm$.003 & 0.005$\pm$.000 & 0.504$\pm$.000 & 0.994$\pm$.000 & 0.668$\pm$.000 \\
+DYNOTEARS & 0.522$\pm$.011 & 0.349$\pm$.031 & 0.305$\pm$.012 & 0.695$\pm$.012 & 0.651$\pm$.031 & 0.373$\pm$.022 & 0.349$\pm$.031 & 0.344$\pm$.030 \\
+VARLINGAM & 0.687$\pm$.005 & 0.612$\pm$.009 & 0.243$\pm$.003 & 0.757$\pm$.003 & 0.383$\pm$.009 & 0.701$\pm$.004 & 0.617$\pm$.009 & 0.653$\pm$.007 \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{sidewaystable}[p]
+\centering
+\scriptsize
+\caption{Large-scale results (Informer model) on the \texttt{Kuramoto5} data collection (semi-synthetic, out-of-distribution). Reported are mean ($\pm$ standard deviation) values across multiple runs.}
+\label{app:kuramoto5-largescale}
+
+\begin{tabular}{lcccccccc}
+\toprule
+\textbf{Model} & $\mathbf{\text{AUC}_{mean}}$ & $\mathbf{\text{TPR}_{mean}}$ & $\mathbf{\text{FPR}_{mean}}$ & $\mathbf{\text{TNR}_{mean}}$ & $\mathbf{\text{FNR}_{mean}}$ & $\mathbf{\text{Precision}_{mean}}$ & $\mathbf{\text{Recall}_{mean}}$ & $\mathbf{\text{F1}_{mean}}$ \\
+\midrule
+LCM 2.5M & 0.913$\pm$.000 & 0.997$\pm$.000 & 0.171$\pm$.000 & 0.829$\pm$.000 & 0.003$\pm$.000 & 0.855$\pm$.000 & 0.997$\pm$.000 & 0.920$\pm$.000 \\
+LCM 9.4M & 0.919$\pm$.000 & 0.997$\pm$.000 & 0.161$\pm$.000 & 0.839$\pm$.000 & 0.001$\pm$.000 & 0.863$\pm$.000 & 0.999$\pm$.000 & 0.925$\pm$.000 \\
+LCM 12.2M & 0.922$\pm$.000 & 0.999$\pm$.000 & 0.153$\pm$.000 & 0.847$\pm$.000 & 0.002$\pm$.000 & 0.868$\pm$.000 & 0.997$\pm$.000 & 0.928$\pm$.000 \\
+LCM 24M & 0.932$\pm$.000 & 0.997$\pm$.000 & 0.060$\pm$.000 & 0.939$\pm$.000 & 0.076$\pm$.000 & 0.939$\pm$.000 & 0.923$\pm$.000 & 0.928$\pm$.000 \\
+CP (Stein et al.) & 0.518$\pm$.000 & 0.235$\pm$.000 & 0.199$\pm$.000 & 0.801$\pm$.000 & 0.767$\pm$.000 & 0.488$\pm$.000 & 0.235$\pm$.000 & 0.312$\pm$.000 \\
+PCMCI & 0.466$\pm$.000 & 0.981$\pm$.000 & 0.966$\pm$.000 & 0.034$\pm$.000 & 0.019$\pm$.000 & 0.504$\pm$.000 & 0.981$\pm$.000 & 0.665$\pm$.000 \\
+DYNOTEARS & 0.499$\pm$.000 & 0.007$\pm$.000 & 0.008$\pm$.000 & 0.992$\pm$.000 & 0.993$\pm$.000 & 0.067$\pm$.000 & 0.007$\pm$.000 & 0.013$\pm$.000 \\
+VARLINGAM & 0.504$\pm$.000 & 0.653$\pm$.000 & 0.645$\pm$.000 & 0.355$\pm$.000 & 0.347$\pm$.000 & 0.499$\pm$.000 & 0.653$\pm$.000 & 0.561$\pm$.000 \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+
+\begin{sidewaystable}[p]
+\centering
+\scriptsize
+\caption{Significance of AUC differences between large-scale LCMs (\texttt{Kuramoto5}). Reported are mean ($\pm$ standard deviation) values across multiple runs.}
+\label{app:kuramoto5-largescale-significance}
+
+\begin{tabular}{l l c c c c}
+\toprule
+\textbf{Model A} & \textbf{Model B} & $\mathbf{\text{AUC}_A}$ & $\mathbf{\text{AUC}_B}$ & \textbf{p-value} & \textbf{Significant after correction} \\
+\midrule
+CP trf & LCM 2.5M & 0.518$\pm$.078 & 0.913$\pm$.030 & 3.33e-165 & Yes \\
+CP trf & LCM 9.4M & 0.518$\pm$.078 & 0.919$\pm$.029 & 3.33e-165 & Yes \\
+CP trf & LCM 12.2M & 0.518$\pm$.078 & 0.923$\pm$.017 & 3.33e-165 & Yes \\
+CP trf & LCM 24M & 0.518$\pm$.078 & 0.931$\pm$.046 & 3.33e-165 & Yes \\
+CP trf & PCMCI & 0.518$\pm$.078 & 0.466$\pm$.103 & 1.35e-34 & Yes \\
+CP trf & DYNOTEARS & 0.518$\pm$.078 & 0.499$\pm$.018 & 8.25e-10 & Yes \\
+CP trf & VARLINGAM & 0.518$\pm$.078 & 0.504$\pm$.096 & 0.0007 & Yes \\
+LCM 2.5M & LCM 9.4M & 0.913$\pm$.025 & 0.919$\pm$.030 & 1.95e-19 & Yes \\
+LCM 2.5M & LCM 12.2M & 0.913$\pm$.025 & 0.923$\pm$.018 & 5.59e-46 & Yes \\
+LCM 2.5M & LCM 24M & 0.913$\pm$.025 & 0.931$\pm$.046 & 1.70e-27 & Yes \\
+LCM 2.5M & PCMCI & 0.913$\pm$.025 & 0.466$\pm$.103 & 3.33e-165 & Yes \\
+LCM 2.5M & DYNOTEARS & 0.913$\pm$.025 & 0.499$\pm$.018 & 3.32e-165 & Yes \\
+LCM 2.5M & VARLINGAM & 0.913$\pm$.025 & 0.504$\pm$.096 & 3.33e-165 & Yes \\
+LCM 9.4M & LCM 12.2M & 0.919$\pm$.029 & 0.923$\pm$.018 & 0.0007 & Yes \\
+LCM 9.4M & LCM 24M & 0.919$\pm$.029 & 0.931$\pm$.046 & 2.64e-14 & Yes \\
+LCM 9.4M & PCMCI & 0.919$\pm$.029 & 0.466$\pm$.103 & 3.33e-165 & Yes \\
+LCM 9.4M & DYNOTEARS & 0.919$\pm$.029 & 0.499$\pm$.018 & 3.32e-165 & Yes \\
+LCM 9.4M & VARLINGAM & 0.919$\pm$.029 & 0.504$\pm$.096 & 3.33e-165 & Yes \\
+LCM 12.2M & LCM 24M & 0.923$\pm$.018 & 0.931$\pm$.046 & 1.77e-13 & Yes \\
+LCM 12.2M & PCMCI & 0.923$\pm$.018 & 0.466$\pm$.103 & 3.33e-165 & Yes \\
+LCM 12.2M & DYNOTEARS & 0.923$\pm$.018 & 0.499$\pm$.018 & 3.32e-165 & Yes \\
+LCM 12.2M & VARLINGAM & 0.923$\pm$.018 & 0.504$\pm$.096 & 3.33e-165 & Yes \\
+LCM 24M & PCMCI & 0.931$\pm$.046 & 0.466$\pm$.103 & 3.33e-165 & Yes \\
+LCM 24M & DYNOTEARS & 0.931$\pm$.046 & 0.499$\pm$.018 & 3.32e-165 & Yes \\
+LCM 24M & VARLINGAM & 0.931$\pm$.046 & 0.504$\pm$.096 & 3.33e-165 & Yes \\
+PCMCI & DYNOTEARS & 0.466$\pm$.103 & 0.499$\pm$.018 & 1.23e-21 & Yes \\
+PCMCI & VARLINGAM & 0.466$\pm$.103 & 0.504$\pm$.096 & 8.89e-20 & Yes \\
+DYNOTEARS & VARLINGAM & 0.499$\pm$.018 & 0.504$\pm$.096 & 0.171 & No \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{sidewaystable}[p]
+\centering
+\scriptsize
+\caption{Large-scale results (Informer model) on the \texttt{Kuramoto10} data collection (semi-synthetic, out-of-distribution). Reported are mean ($\pm$ standard deviation) values across multiple runs.}
+\label{app:kuramoto-largescale}
+
+\begin{tabular}{lcccccccc}
+\toprule
+\textbf{Model} & $\mathbf{\text{AUC}_{mean}}$ & $\mathbf{\text{TPR}_{mean}}$ & $\mathbf{\text{FPR}_{mean}}$ & $\mathbf{\text{TNR}_{mean}}$ & $\mathbf{\text{FNR}_{mean}}$ & $\mathbf{\text{Precision}_{mean}}$ & $\mathbf{\text{Recall}_{mean}}$ & $\mathbf{\text{F1}_{mean}}$ \\
+\midrule
+LCM 2.5M & 0.896$\pm$.000 & 0.950$\pm$.000 & 0.158$\pm$.000 & 0.842$\pm$.000 & 0.050$\pm$.000 & 0.858$\pm$.000 & 0.950$\pm$.000 & 0.901$\pm$.000 \\
+LCM 9.4M & 0.926$\pm$.000 & 0.999$\pm$.000 & 0.147$\pm$.000 & 0.853$\pm$.000 & 0.001$\pm$.000 & 0.872$\pm$.000 & 0.999$\pm$.000 & 0.931$\pm$.000 \\
+LCM 12.2M & 0.902$\pm$.000 & 0.992$\pm$.000 & 0.188$\pm$.000 & 0.812$\pm$.000 & 0.008$\pm$.000 & 0.844$\pm$.000 & 0.992$\pm$.000 & 0.911$\pm$.000 \\
+LCM 24M & 0.913$\pm$.000 & 0.979$\pm$.000 & 0.153$\pm$.000 & 0.847$\pm$.000 & 0.022$\pm$.000 & 0.865$\pm$.000 & 0.978$\pm$.000 & 0.917$\pm$.000 \\
+PCMCI & 0.640$\pm$.000 & 0.977$\pm$.000 & 0.950$\pm$.000 & 0.050$\pm$.000 & 0.233$\pm$.000 & 0.507$\pm$.000 & 0.977$\pm$.000 & 0.667$\pm$.000 \\
+DYNOTEARS & 0.503$\pm$.000 & 0.019$\pm$.000 & 0.014$\pm$.000 & 0.986$\pm$.000 & 0.981$\pm$.000 & 0.370$\pm$.000 & 0.193$\pm$.000 & 0.036$\pm$.000 \\
+VARLINGAM & 0.584$\pm$.000 & 0.618$\pm$.000 & 0.449$\pm$.000 & 0.551$\pm$.000 & 0.382$\pm$.000 & 0.578$\pm$.000 & 0.618$\pm$.000 & 0.591$\pm$.000 \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+\begin{sidewaystable}[p]
+\centering
+\scriptsize
+\caption{Significance of AUC differences between large-scale LCMs (\texttt{Kuramoto10}). Reported are mean AUCs ($\pm$ standard deviation), raw p-values, and significance after correction.}
+\label{app:kuramoto-largescale-significance}
+
+\begin{tabular}{l l c c c c}
+\toprule
+\textbf{Model A} & \textbf{Model B} & $\mathbf{\text{AUC}_A}$ & $\mathbf{\text{AUC}_B}$ & \textbf{p-value} & \textbf{Significant after correction} \\
+\midrule
+LCM 2.5M & LCM 9.4M & 0.896$\pm$.038 & 0.926$\pm$.014 & 1.17e-129 & Yes \\
+LCM 2.5M & LCM 12.2M & 0.896$\pm$.038 & 0.902$\pm$.040 & 5.82e-10 & Yes \\
+LCM 2.5M & LCM 24M & 0.896$\pm$.038 & 0.913$\pm$.024 & 1.58e-29 & Yes \\
+LCM 2.5M & PCMCI & 0.896$\pm$.038 & 0.640$\pm$.046 & 3.34e-165 & Yes \\
+LCM 2.5M & DYNOTEARS & 0.896$\pm$.038 & 0.503$\pm$.010 & 3.33e-165 & Yes \\
+LCM 2.5M & VARLINGAM & 0.896$\pm$.038 & 0.584$\pm$.045 & 3.33e-165 & Yes \\
+LCM 9.4M & LCM 12.2M & 0.926$\pm$.014 & 0.902$\pm$.040 & 9.65e-115 & Yes \\
+LCM 9.4M & LCM 24M & 0.926$\pm$.014 & 0.913$\pm$.024 & 7.37e-95 & Yes \\
+LCM 9.4M & PCMCI & 0.926$\pm$.014 & 0.640$\pm$.046 & 3.33e-165 & Yes \\
+LCM 9.4M & DYNOTEARS & 0.926$\pm$.014 & 0.503$\pm$.010 & 3.32e-165 & Yes \\
+LCM 9.4M & VARLINGAM & 0.926$\pm$.014 & 0.584$\pm$.045 & 3.33e-165 & Yes \\
+LCM 12.2M & LCM 24M & 0.902$\pm$.040 & 0.913$\pm$.024 & 1.05e-06 & Yes \\
+LCM 12.2M & PCMCI & 0.902$\pm$.040 & 0.640$\pm$.046 & 3.33e-165 & Yes \\
+LCM 12.2M & DYNOTEARS & 0.902$\pm$.040 & 0.503$\pm$.010 & 3.33e-165 & Yes \\
+LCM 12.2M & VARLINGAM & 0.902$\pm$.040 & 0.584$\pm$.045 & 3.33e-165 & Yes \\
+LCM 24M & PCMCI & 0.913$\pm$.024 & 0.640$\pm$.046 & 3.33e-165 & Yes \\
+LCM 24M & DYNOTEARS & 0.913$\pm$.024 & 0.503$\pm$.010 & 3.33e-165 & Yes \\
+LCM 24M & VARLINGAM & 0.9128$\pm$.024 & 0.584$\pm$.045 & 3.33e-165 & Yes \\
+PCMCI & DYNOTEARS & 0.6404$\pm$.046 & 0.503$\pm$.010 & 3.59e-165 & Yes \\
+PCMCI & VARLINGAM & 0.6404$\pm$.046 & 0.584$\pm$.045 & 7.26e-110 & Yes \\
+DYNOTEARS & VARLINGAM & 0.5025$\pm$.0104 & 0.584$\pm$.045 & 1.28e-159 & Yes \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{sidewaystable}[p]
+\centering
+\scriptsize
+\caption{Large-scale results (Informer model) on the \texttt{AirQualityMS} data collection (simulated, out-of-distribution). Reported are mean ($\pm$ standard deviation) values across multiple runs.}
+\label{app:airqualityms-largescale}
+\begin{tabular}{lcccccccc}
+\toprule
+\textbf{Model} & $\mathbf{\text{AUC}_{mean}}$ & $\mathbf{\text{TPR}_{mean}}$ & $\mathbf{\text{FPR}_{mean}}$ & $\mathbf{\text{TNR}_{mean}}$ & $\mathbf{\text{FNR}_{mean}}$ & $\mathbf{\text{Precision}_{mean}}$ & $\mathbf{\text{Recall}_{mean}}$ & $\mathbf{\text{F1}_{mean}}$ \\
+\midrule
+LCM 2.5M & 0.955$\pm$.000 & 0.974$\pm$.001 & 0.060$\pm$.000 & 0.937$\pm$.000 & 0.030$\pm$.001 & 0.940$\pm$.000 & 0.974$\pm$.001 & 0.955$\pm$.000 \\
+LCM 9.4M & 0.914$\pm$.001 & 0.872$\pm$.002 & 0.045$\pm$.000 & 0.955$\pm$.000 & 0.130$\pm$.003 & 0.952$\pm$.000 & 0.872$\pm$.000 & 0.898$\pm$.001 \\
+LCM 12.2M & 0.914$\pm$.001 & 0.890$\pm$.002 & 0.060$\pm$.000 & 0.938$\pm$.000 & 0.110$\pm$.002 & 0.928$\pm$.004 & 0.890$\pm$.002 & 0.898$\pm$.002 \\
+LCM 24M & 0.813$\pm$.006 & 0.693$\pm$.013 & 0.060$\pm$.000 & 0.933$\pm$.000 & 0.310$\pm$.012 & 0.800$\pm$.010 & 0.694$\pm$.012 & 0.710$\pm$.002 \\
+PCMCI & 0.556$\pm$.000 & 0.913$\pm$.000 & 0.901$\pm$.000 & 0.098$\pm$.000 & 0.070$\pm$.000 & 0.517$\pm$.000 & 0.913$\pm$.000 & 0.639$\pm$.000 \\
+DYNOTEARS & 0.694$\pm$.000 & 0.482$\pm$.000 & 0.482$\pm$.000 & 0.910$\pm$.000 & 0.520$\pm$.000 & 0.835$\pm$.000 & 0.482$\pm$.000 & 0.544$\pm$.000 \\
+VARLINGAM & 0.552$\pm$.000 & 0.552$\pm$.000 & 0.552$\pm$.000 & 0.551$\pm$.000 & 0.448$\pm$.000 & 0.496$\pm$.000 & 0.552$\pm$.000 & 0.494$\pm$.000 \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+\begin{sidewaystable}[p]
+\centering
+\scriptsize
+\caption{Significance of AUC differences between large-scale LCMs (\texttt{AirQualityMS}). Reported are mean AUCs ($\pm$ standard deviation), raw p-values, and significance after correction.}
+\label{app:airqualityms-largescale-significance}
+
+\begin{tabular}{l l c c c c}
+\toprule
+\textbf{Model A} & \textbf{Model B} & $\mathbf{\text{AUC}_A}$ & $\mathbf{\text{AUC}_B}$ & \textbf{p-value} & \textbf{Significant after correction} \\
+\midrule
+LCM 2.5M & LCM 9.4M & 0.954$\pm$.034 & 0.910$\pm$.094 & 0.15025 & No \\
+LCM 2.5M & LCM 12.2M & 0.954$\pm$.034 & 0.913$\pm$.094 & 0.00723 & No \\
+LCM 2.5M & LCM 24M & 0.954$\pm$.034 & 0.829$\pm$.175 & 1.29e-05 & Yes \\
+LCM 2.5M & PCMCI & 0.954$\pm$.034 & 0.557$\pm$.215 & 1.63e-10 & Yes \\
+LCM 2.5M & DYNOTEARS & 0.954$\pm$.034 & 0.695$\pm$.232 & 8.61e-07 & Yes \\
+LCM 2.5M & VARLINGAM & 0.952$\pm$.036 & 0.552$\pm$.176 & 5.68e-14 & Yes \\
+LCM 9.4M & LCM 12.2M & 0.910$\pm$.094 & 0.913$\pm$.094 & 0.76842 & No \\
+LCM 9.4M & LCM 24M & 0.910$\pm$.094 & 0.829$\pm$.175 & 0.04917 & No \\
+LCM 9.4M & PCMCI & 0.910$\pm$.094 & 0.5567$\pm$.215 & 1.72e-10 & Yes \\
+LCM 9.4M & DYNOTEARS & 0.910$\pm$.094 & 0.695$\pm$.232 & 8.61e-07 & Yes \\
+LCM 9.4M & VARLINGAM & 0.898$\pm$.098 & 0.552$\pm$.176 & 5.18e-09 & Yes \\
+LCM 12.2M & LCM 24M & 0.913$\pm$.094 & 0.829$\pm$.175 & 0.0089 & No \\
+LCM 12.2M & PCMCI & 0.913$\pm$.094 & 0.557$\pm$.215 & 1.72e-10 & Yes \\
+LCM 12.2M & DYNOTEARS & 0.913$\pm$.094 & 0.695$\pm$.232 & 3.54e-06 & Yes \\
+LCM 12.2M & VARLINGAM & 0.913$\pm$.076 & 0.552$\pm$.176 & 5.18e-09 & Yes \\
+LCM 24M & PCMCI & 0.829$\pm$.175 & 0.557$\pm$.215 & 9.54e-09 & Yes \\
+LCM 24M & DYNOTEARS & 0.829$\pm$.175 & 0.695$\pm$.232 & 0.00327 & No \\
+LCM 24M & VARLINGAM & 0.823$\pm$.167 & 0.552$\pm$.176 & 1.79e-07 & Yes \\
+PCMCI & DYNOTEARS & 0.557$\pm$.215 & 0.695$\pm$.232 & 0.03955 & No \\
+PCMCI & VARLINGAM & 0.552$\pm$.194 & 0.552$\pm$.176 & 0.94224 & No \\
+DYNOTEARS & VARLINGAM & 0.640$\pm$.212 & 0.552$\pm$.176 & 0.10671 & No \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{sidewaystable}[htbp]
+\centering
+\scriptsize
+\caption{Large-scale results (PatchTSTSpacetimeformer model) on the \texttt{S\_Joint} data collection (synthetic). Reported are mean ($\pm$ standard deviation) values across multiple runs, raw p-values, and significance after correction.}
+\vspace{0.5em}
+
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Test Data} & \textbf{Lags} & \textbf{Variables} & \textbf{Func. Dep.} & \textbf{\# Samples} & \textbf{\# Datasets} \\
+\midrule
+S\_Joint & 1--3 & 3--5 & L, NL & 500 & 2000 \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+\hfill
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Max epochs & 100 \\
+Patience & \textbf{20} \\
+Learning rate \(lr\) & \(1\text{e-}4\) \\
+\(d_{model}\) & 512 / 256 \\
+\(n_{heads}\) & 4 / 4 \\
+\(n_{blocks}\) & 4 / 6 \\
+\(d_{ff}\) & 512 / 512 \\
+Dropout & \textbf{0.05} \\
+\(L_{max}\) & 500 \\
+Training Aids & CI, CR \\
+Total params & 9.4M / 9.1M \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+
+\begin{tabular}{lcccccccc}
+\toprule
+\multicolumn{9}{c}{\textbf{Performance Metrics}} \\
+\midrule
+\textbf{Model} & $\mathbf{\text{AUC}_{mean}}$ & $\mathbf{\text{TPR}_{mean}}$ & $\mathbf{\text{FPR}_{mean}}$ & $\mathbf{\text{TNR}_{mean}}$ & $\mathbf{\text{FNR}_{mean}}$ & $\mathbf{\text{Precision}_{mean}}$ & $\mathbf{\text{Recall}_{mean}}$ & $\mathbf{\text{F1}_{mean}}$ \\
+\midrule
+LCM 9.4M & 0.962$\pm$.000 & 0.945$\pm$.000 & 0.020$\pm$.000 & 0.979$\pm$.000 & 0.054$\pm$.000 & 0.953$\pm$.000 & 0.945$\pm$.000 & 0.945$\pm$.000 \\
+LCM 9.1M (updated arch.) & 0.954$\pm$.000 & 0.925$\pm$.000 & 0.016$\pm$.000 & 0.983$\pm$.000 & 0.074$\pm$.001 & 0.943$\pm$.001 & 0.925$\pm$.000 & 0.929$\pm$.001 \\
+\midrule
+\multicolumn{9}{c}{\textbf{Pairwise AUC Comparison}} \\
+\midrule
+\textbf{Model A} & \textbf{Model B} & $\mathbf{\text{AUC}_A}$ & $\mathbf{\text{AUC}_B}$ & \textbf{p-value} & \textbf{Significant after correction} \\
+LCM 9.4M & LCM 9.1M (updated arch.) & 0.962$\pm$.000 & 0.954$\pm$.000 & 5.8e--24 & Yes \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+
+\begin{sidewaystable}[htbp]
+\centering
+\scriptsize
+\caption{Large-scale results (PatchTSTSpacetimeformer model) on the \texttt{Synth\_230k} data collection (in-distribution, synthetic, holdout test set). Reported are mean ($\pm$ standard deviation) values across multiple runs, raw p-values, and significance after correction.}
+\vspace{0.5em}
+
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Test Data} & \textbf{Lags} & \textbf{Variables} & \textbf{Func. Dep.} & \textbf{\# Samples} & \textbf{\# Datasets} \\
+\midrule
+Synth\_230K & 1--3 & 3--12 & L, NL & 500 & 2000 \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+\hfill
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Max epochs & 100 \\
+Patience & \textbf{20} \\
+Learning rate \(lr\) & \(1\text{e-}4\) \\
+\(d_{model}\) & 512 / 256 \\
+\(n_{heads}\) & 4 / 4 \\
+\(n_{blocks}\) & 4 / 6 \\
+\(d_{ff}\) & 512 / 512 \\
+Dropout & \textbf{0.05} \\
+\(L_{max}\) & 500 \\
+Training Aids & CI, CR \\
+Total params & 9.4M / 9.1M \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+
+\begin{tabular}{lcccccccc}
+\toprule
+\multicolumn{9}{c}{\textbf{Performance Metrics}} \\
+\midrule
+\textbf{Model} & $\mathbf{\text{AUC}_{mean}}$ & $\mathbf{\text{TPR}_{mean}}$ & $\mathbf{\text{FPR}_{mean}}$ & $\mathbf{\text{TNR}_{mean}}$ & $\mathbf{\text{FNR}_{mean}}$ & $\mathbf{\text{Precision}_{mean}}$ & $\mathbf{\text{Recall}_{mean}}$ & $\mathbf{\text{F1}_{mean}}$ \\
+\midrule
+LCM 9.4M & 0.789$\pm$.000 & 0.684$\pm$.000 & 0.105$\pm$.000 & 0.895$\pm$.000 & 0.316$\pm$.000 & 0.823$\pm$.000 & 0.684$\pm$.000 & 0.728$\pm$.000 \\
+LCM 9.1M (updated arch.) & 0.805$\pm$.000 & 0.710$\pm$.000 & 0.100$\pm$.000 & 0.900$\pm$.000 & 0.290$\pm$.000 & 0.843$\pm$.000 & 0.710$\pm$.000 & 0.751$\pm$.000 \\
+\midrule
+\multicolumn{9}{c}{\textbf{Pairwise AUC Comparison}} \\
+\midrule
+\textbf{Model A} & \textbf{Model B} & $\mathbf{\text{AUC}_A}$ & $\mathbf{\text{AUC}_B}$ & \textbf{p-value} & \textbf{Significant after correction} \\
+LCM 9.4M & LCM 9.1M (updated arch.) & 0.789$\pm$.000 & 0.805$\pm$.000 & 6.29e--16 & Yes \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+\begin{sidewaystable}[htbp]
+\centering
+\scriptsize
+\caption{Large-scale results (PatchTSTSpacetimeformer model) on the \texttt{Synth\_230K\_Sim\_45K} data collection (in-distribution, mixed, holdout). Reported are mean ($\pm$ standard deviation) values across multiple runs, raw p-values, and significance after correction.}
+\vspace{0.5em}
+
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Test Data} & \textbf{Lags} & \textbf{Variables} & \textbf{Func. Dep.} & \textbf{\# Samples} & \textbf{\# Datasets} \\
+\midrule
+Synth\_230K\_Sim\_45K & 1--3 & 3--12 & L, NL & 500 & 5500 \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+\hfill
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Max epochs & 100 \\
+Patience & \textbf{20} \\
+Learning rate \(lr\) & \(1\text{e-}4\) \\
+\(d_{model}\) & 512 / 256 \\
+\(n_{heads}\) & 4 / 4 \\
+\(n_{blocks}\) & 4 / 6 \\
+\(d_{ff}\) & 512 / 512 \\
+Dropout & \textbf{0.05} \\
+\(L_{max}\) & 500 \\
+Training Aids & CI, CR \\
+Total params & 9.4M / 9.1M \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+
+\begin{tabular}{lcccccccc}
+\toprule
+\multicolumn{9}{c}{\textbf{Performance Metrics}} \\
+\midrule
+\textbf{Model} & $\mathbf{\text{AUC}_{mean}}$ & $\mathbf{\text{TPR}_{mean}}$ & $\mathbf{\text{FPR}_{mean}}$ & $\mathbf{\text{TNR}_{mean}}$ & $\mathbf{\text{FNR}_{mean}}$ & $\mathbf{\text{Precision}_{mean}}$ & $\mathbf{\text{Recall}_{mean}}$ & $\mathbf{\text{F1}_{mean}}$ \\
+\midrule
+LCM 9.4M & 0.797$\pm$.000 & 0.727$\pm$.000 & 0.134$\pm$.000 & 0.866$\pm$.000 & 0.272$\pm$.000 & 0.823$\pm$.000 & 0.723$\pm$.000 & 0.752$\pm$.000 \\
+LCM 9.1M (updated arch.) & 0.810$\pm$.000 & 0.750$\pm$.000 & 0.130$\pm$.000 & 0.870$\pm$.000 & 0.250$\pm$.000 & 0.835$\pm$.000 & 0.750$\pm$.000 & 0.770$\pm$.000 \\
+\midrule
+\multicolumn{9}{c}{\textbf{Pairwise AUC Comparison}} \\
+\midrule
+\textbf{Model A} & \textbf{Model B} & $\mathbf{\text{AUC}_A}$ & $\mathbf{\text{AUC}_B}$ & \textbf{p-value} & \textbf{Significant after correction} \\
+LCM 9.4M & LCM 9.1M (updated arch.) & 0.793$\pm$.000 & 0.799$\pm$.000 & 0.0146 & Yes \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+
+\begin{sidewaystable}[htbp]
+\centering
+\scriptsize
+\caption{Large-scale results (PatchTSTSpacetimeformer model) on the \texttt{Sim\_45K} data collection (in-distribution, simulated, holdout). Reported are mean ($\pm$ standard deviation) values across multiple runs, raw p-values, and significance after correction.}
+\vspace{0.5em}
+
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Test Data} & \textbf{Lags} & \textbf{Variables} & \textbf{Func. Dep.} & \textbf{\# Samples} & \textbf{\# Datasets} \\
+\midrule
+Sim\_45K & 1--3 & 3--12 & L, NL & 500 & 2000 \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+\hfill
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Max epochs & 100 \\
+Patience & \textbf{20} \\
+Learning rate \(lr\) & \(1\text{e-}4\) \\
+\(d_{model}\) & 512 / 256 \\
+\(n_{heads}\) & 4 / 4 \\
+\(n_{blocks}\) & 4 / 6 \\
+\(d_{ff}\) & 512 / 512 \\
+Dropout & \textbf{0.05} \\
+\(L_{max}\) & 500 \\
+Training Aids & CI, CR \\
+Total params & 9.4M / 9.1M \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+
+\begin{tabular}{lcccccccc}
+\toprule
+\multicolumn{9}{c}{\textbf{Performance Metrics}} \\
+\midrule
+\textbf{Model} & $\mathbf{\text{AUC}_{mean}}$ & $\mathbf{\text{TPR}_{mean}}$ & $\mathbf{\text{FPR}_{mean}}$ & $\mathbf{\text{TNR}_{mean}}$ & $\mathbf{\text{FNR}_{mean}}$ & $\mathbf{\text{Precision}_{mean}}$ & $\mathbf{\text{Recall}_{mean}}$ & $\mathbf{\text{F1}_{mean}}$ \\
+\midrule
+LCM 9.4M & 0.840$\pm$.000 & 0.951$\pm$.000 & 0.270$\pm$.000 & 0.723$\pm$.000 & 0.049$\pm$.000 & 0.793$\pm$.000 & 0.951$\pm$.000 & 0.857$\pm$.000 \\
+LCM 9.1M (updated arch.) & 0.849$\pm$.000 & 0.959$\pm$.000 & 0.262$\pm$.000 & 0.738$\pm$.000 & 0.041$\pm$.000 & 0.800$\pm$.000 & 0.959$\pm$.000 & 0.865$\pm$.000 \\
+\midrule
+\multicolumn{9}{c}{\textbf{Pairwise AUC Comparison}} \\
+\midrule
+\textbf{Model A} & \textbf{Model B} & $\mathbf{\text{AUC}_A}$ & $\mathbf{\text{AUC}_B}$ & \textbf{p-value} & \textbf{Significant after correction} \\
+LCM 9.4M & LCM 9.1M (updated arch.) & 0.841$\pm$.000 & 0.849$\pm$.000 & 1.06e--13 & Yes \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+\begin{sidewaystable}[htbp]
+\centering
+\scriptsize
+\caption{Large-scale results (PatchTSTSpacetimeformer model) on the \(f\)MRI5 data collection (semi-synthetic, out-of-distribution). Reported are mean ($\pm$ standard deviation) values across multiple runs, raw p-values, and significance after correction.}
+\vspace{0.5em}
+
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Test Data} & \textbf{Variables} & \textbf{Func. Dep.} & \textbf{Edge Prob.} & \textbf{\# Samples} & \textbf{\# Datasets} \\
+\midrule
+\(f\)MRI5 & 5 & NL & -- & [200--2400] & 21 \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+\hfill
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Max epochs & 100 \\
+Patience & \textbf{20} \\
+Learning rate \(lr\) & \(1\text{e-}4\) \\
+\(d_{model}\) & 512 / 256 \\
+\(n_{heads}\) & 4 / 4 \\
+\(n_{blocks}\) & 4 / 6 \\
+\(d_{ff}\) & 512 / 512 \\
+Dropout & \textbf{0.05} \\
+\(L_{max}\) & 500 \\
+Training Aids & CI, CR \\
+Total params & 9.4M / 9.1M \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+
+\begin{tabular}{lcccccccc}
+\toprule
+\multicolumn{9}{c}{\textbf{Performance Metrics}} \\
+\midrule
+\textbf{Model} & $\mathbf{\text{AUC}_{mean}}$ & $\mathbf{\text{TPR}_{mean}}$ & $\mathbf{\text{FPR}_{mean}}$ & $\mathbf{\text{TNR}_{mean}}$ & $\mathbf{\text{FNR}_{mean}}$ & $\mathbf{\text{Precision}_{mean}}$ & $\mathbf{\text{Recall}_{mean}}$ & $\mathbf{\text{F1}_{mean}}$ \\
+\midrule
+LCM 9.4M & 0.944$\pm$.001 & 1.000$\pm$.000 & 0.113$\pm$.002 & 0.887$\pm$.002 & 0.000$\pm$.000 & 0.900$\pm$.001 & 1.000$\pm$.000 & 0.945$\pm$.000 \\
+LCM 9.1M (updated arch.) & 0.960$\pm$.000 & 0.991$\pm$.001 & 0.072$\pm$.001 & 0.928$\pm$.001 & 0.008$\pm$.001 & 0.934$\pm$.001 & 0.991$\pm$.001 & 0.961$\pm$.000 \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+\begin{sidewaystable}[htbp]
+\centering
+\scriptsize
+\caption{Large-scale results (PatchTSTSpacetimeformer model) on the \(f\)MRI data collection (semi-synthetic, out-of-distribution). Reported are mean ($\pm$ standard deviation) values across multiple runs, raw p-values, and significance after correction.}
+\vspace{0.5em}
+
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Test Data} & \textbf{Lags} & \textbf{Variables} & \textbf{Func. Dep.} & \textbf{Edge Prob.} & \textbf{\# Samples} & \textbf{\# Datasets} \\
+\midrule
+\(f\)MRI & 1 & 5, 10 & NL & -- & [200--2400] & 26 \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+\hfill
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Max epochs & 100 \\
+Patience & \textbf{20} \\
+Learning rate \(lr\) & \(1\text{e-}4\) \\
+\(d_{model}\) & 512 / 256 \\
+\(n_{heads}\) & 4 / 4 \\
+\(n_{blocks}\) & 4 / 6 \\
+\(d_{ff}\) & 512 / 512 \\
+Dropout & \textbf{0.05} \\
+\(L_{max}\) & 500 \\
+Training Aids & CI, CR \\
+Total params & 9.4M / 9.1M\\
+\bottomrule
+\end{tabular}
+\end{minipage}
+
+\vspace{0.75em}
+\begin{tabular}{lcccccccc}
+\toprule
+\multicolumn{9}{c}{\textbf{Performance Metrics}} \\
+\midrule
+\textbf{Model} & $\mathbf{\text{AUC}_{mean}}$ & $\mathbf{\text{TPR}_{mean}}$ & $\mathbf{\text{FPR}_{mean}}$ & $\mathbf{\text{TNR}_{mean}}$ & $\mathbf{\text{FNR}_{mean}}$ & $\mathbf{\text{Precision}_{mean}}$ & $\mathbf{\text{Recall}_{mean}}$ & $\mathbf{\text{F1}_{mean}}$ \\
+\midrule
+LCM 9.4M & 0.934$\pm$.000 & 1.000$\pm$.000 & 0.131$\pm$.001 & 0.869$\pm$.002 & 0.000$\pm$.000 & 0.887$\pm$.001 & 1.000$\pm$.000 & 0.939$\pm$.000 \\
+LCM 9.1M (updated arch.) & 0.950$\pm$.000 & 0.994$\pm$.000 & 0.098$\pm$.001 & 0.902$\pm$.001 & 0.006$\pm$.000 & 0.912$\pm$.001 & 0.994$\pm$.000 & 0.951$\pm$.000 \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+
+\begin{sidewaystable}[htbp]
+\centering
+\scriptsize
+\caption{Large-scale results (PatchTSTSpacetimeformer model) on the \texttt{Kuramoto5} collection (semi-synthetic, out-of-distribution). Reported are mean ($\pm$ standard deviation) values across multiple runs, raw p-values, and significance after correction.}
+\vspace{0.5em}
+
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Test Data} & \textbf{Lags} & \textbf{Variables} & \textbf{Func. Dep.} & \textbf{\# Samples} & \textbf{\# Datasets} \\
+\midrule
+Kuramoto5 & 1 & 5 & NL & 500 & 1000 \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+\hfill
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Max epochs & 100 \\
+Patience & \textbf{20} \\
+Learning rate \(lr\) & \(1\text{e-}4\) \\
+\(d_{model}\) & 512 / 256 \\
+\(n_{heads}\) & 4 / 4 \\
+\(n_{blocks}\) & 4 / 6 \\
+\(d_{ff}\) & 512 / 512 \\
+Dropout & \textbf{0.05} \\
+\(L_{max}\) & 500 \\
+Training Aids & CI, CR \\
+Total params & 9.4M / 9.1M \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+
+\vspace{0.75em}
+\begin{tabular}{lcccccccc}
+\toprule
+\multicolumn{9}{c}{\textbf{Performance Metrics}} \\
+\midrule
+\textbf{Model} & $\mathbf{\text{AUC}_{mean}}$ & $\mathbf{\text{TPR}_{mean}}$ & $\mathbf{\text{FPR}_{mean}}$ & $\mathbf{\text{TNR}_{mean}}$ & $\mathbf{\text{FNR}_{mean}}$ & $\mathbf{\text{Precision}_{mean}}$ & $\mathbf{\text{Recall}_{mean}}$ & $\mathbf{\text{F1}_{mean}}$ \\
+\midrule
+LCM 9.4M & 0.919$\pm$.000 & 0.999$\pm$.000 & 0.161$\pm$.000 & 0.839$\pm$.000 & 0.015$\pm$.000 & 0.863$\pm$.000 & 0.999$\pm$.000 & 0.925$\pm$.000 \\
+LCM 9.1M (updated arch.) & 0.925$\pm$.000 & 0.952$\pm$.001 & 0.102$\pm$.000 & 0.898$\pm$.000 & 0.049$\pm$.001 & 0.908$\pm$.000 & 0.951$\pm$.001 & 0.924$\pm$.000 \\
+\midrule
+\multicolumn{9}{c}{\textbf{Pairwise AUC Comparison}} \\
+\midrule
+\textbf{Model A} & \textbf{Model B} & $\mathbf{\text{AUC}_A}$ & $\mathbf{\text{AUC}_B}$ & \textbf{p-value} & \textbf{Significant after correction} \\
+\midrule
+LCM 9.4M & 9.1M & 0.919$\pm$.000 & 0.925$\pm$.000 & 1.9e--07 & Yes \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+
+\begin{sidewaystable}[htbp]
+\centering
+\scriptsize
+\caption{Large-scale results (PatchTSTSpacetimeformer model) on the \texttt{Kuramoto10} collection (semi-synthetic, out-of-distribution). Reported are mean ($\pm$ standard deviation) values across multiple runs, raw p-values, and significance after correction.}
+\vspace{0.5em}
+
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Test Data} & \textbf{Lags} & \textbf{Variables} & \textbf{Func. Dep.} & \textbf{\# Samples} & \textbf{\# Datasets} \\
+\midrule
+Kuramoto10 & 1 & 5, 10 & NL & 500 & 1000 \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+\hfill
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Max epochs & 100 \\
+Patience & \textbf{20} \\
+Learning rate \(lr\) & \(1\text{e-}4\) \\
+\(d_{model}\) & 512 / 256 \\
+\(n_{heads}\) & 4 / 4 \\
+\(n_{blocks}\) & 4 / 6 \\
+\(d_{ff}\) & 512 / 512 \\
+Dropout & \textbf{0.05} \\
+\(L_{max}\) & 500 \\
+Training Aids & CI, CR \\
+Total params & 9.4M / 9.1M \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+
+\vspace{0.75em}
+\begin{tabular}{lcccccccc}
+\toprule
+\multicolumn{9}{c}{\textbf{Performance Metrics}} \\
+\midrule
+\textbf{Model} & $\mathbf{\text{AUC}_{mean}}$ & $\mathbf{\text{TPR}_{mean}}$ & $\mathbf{\text{FPR}_{mean}}$ & $\mathbf{\text{TNR}_{mean}}$ & $\mathbf{\text{FNR}_{mean}}$ & $\mathbf{\text{Precision}_{mean}}$ & $\mathbf{\text{Recall}_{mean}}$ & $\mathbf{\text{F1}_{mean}}$ \\
+\midrule
+LCM 9.4M & 0.926$\pm$.000 & 0.999$\pm$.000 & 0.147$\pm$.000 & 0.853$\pm$.000 & 0.015$\pm$.000 & 0.872$\pm$.000 & 0.999$\pm$.000 & 0.931$\pm$.000 \\
+LCM 9.1M (updated arch.) & 0.894$\pm$.000 & 0.998$\pm$.000 & 0.211$\pm$.000 & 0.788$\pm$.000 & 0.017$\pm$.000 & 0.826$\pm$.000 & 0.999$\pm$.000 & 0.904$\pm$.000 \\
+\midrule
+\multicolumn{9}{c}{\textbf{Pairwise AUC Comparison}} \\
+\midrule
+\textbf{Model A} & \textbf{Model B} & $\mathbf{\text{AUC}_A}$ & $\mathbf{\text{AUC}_B}$ & \textbf{p-value} & \textbf{Significant after correction} \\
+\midrule
+LCM 9.4M & LCM 9.1M (updated arch.) & 0.926$\pm$.000 & 0.894$\pm$.000 & 4.06e--139 & Yes \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
+
+
+\begin{sidewaystable}[htbp]
+\centering
+\scriptsize
+\caption{Large-scale results (PatchTSTSpacetimeformer model) on the \texttt{AirQualityMS} collection (simulated, out-of-distribution). Reported are mean ($\pm$ standard deviation) values across multiple runs, raw p-values, and significance after correction.}
+\vspace{0.5em}
+\label{app:airqualityms-uprated}
+
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Test Data} & \textbf{Lags} & \textbf{Variables} & \textbf{\# Samples} & \textbf{\# Datasets} \\
+\midrule
+AirQualityMS & 1--3 & 3--12 & 500 & 54 \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+\hfill
+\begin{minipage}{0.45\linewidth}
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Max epochs & 100 \\
+Patience & \textbf{20} \\
+Learning rate \(lr\) & \(1\text{e-}4\) \\
+\(d_{model}\) & 512 / 256 \\
+\(n_{heads}\) & 4 / 4 \\
+\(n_{blocks}\) & 4 / 6 \\
+\(d_{ff}\) & 512 / 512 \\
+Dropout & \textbf{0.05} \\
+\(L_{max}\) & 500 \\
+Training Aids & CI, CR \\
+Total params & 9.4M / 9.1M \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+
+\vspace{0.75em}
+\begin{tabular}{lcccccccc}
+\toprule
+\multicolumn{9}{c}{\textbf{Performance Metrics}} \\
+\midrule
+\textbf{Model} & $\mathbf{\text{AUC}_{mean}}$ & $\mathbf{\text{TPR}_{mean}}$ & $\mathbf{\text{FPR}_{mean}}$ & $\mathbf{\text{TNR}_{mean}}$ & $\mathbf{\text{FNR}_{mean}}$ & $\mathbf{\text{Precision}_{mean}}$ & $\mathbf{\text{Recall}_{mean}}$ & $\mathbf{\text{F1}_{mean}}$ \\
+\midrule
+LCM 9.4M & 0.914$\pm$.001 & 0.872$\pm$.002 & 0.045$\pm$.000 & 0.955$\pm$.000 & 0.128$\pm$.003 & 0.952$\pm$.000 & 0.872$\pm$.003 & 0.898$\pm$.002 \\
+LCM 9.1M (uprated arch.)  & 0.903$\pm$.002 & 0.865$\pm$.004 & 0.059$\pm$.000 & 0.940$\pm$.000 & 0.135$\pm$.005 & 0.934$\pm$.003 & 0.865$\pm$.004 & 0.879$\pm$.003 \\
+\midrule
+\multicolumn{9}{c}{\textbf{Pairwise AUC Comparison}} \\
+\midrule
+\textbf{Model A} & \textbf{Model B} & $\mathbf{\text{AUC}_A}$ & $\mathbf{\text{AUC}_B}$ & \textbf{p-value} & \textbf{Significant after correction} \\
+\midrule
+LCM 9.4M & LCM 9.1M (uprated arch.) & 0.910$\pm$.000 & 0.898$\pm$.000 & 0.0359 & Yes \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable}
