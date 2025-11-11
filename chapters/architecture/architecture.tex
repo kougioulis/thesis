@@ -1,0 +1,513 @@
+\chapter{Architecture} \label{chap:architecture}
+
+\begin{chapquote}{\textit{Steve Jobs}}
+``The design is not just what it looks like and feels like. Design is how it works.''
+\end{chapquote}
+
+Previous chapters established the theoretical and methodological ground for a scalable, data-driven foundation-model approach to temporal causal discovery. This chapter focuses on the architectural design of LCMs. In contrast to explicit statistical or structural constraints, LCMs must intrinsically learn to represent complex temporal dynamics and generalize across heterogeneous data distributions. The goal is first, to formalize the key design considerations and characteristics that guide causal discovery under the foundation model paradigm, and second, to present the detailed architectural components that realize the above.
+
+Section \ref{sec:arch-objectives} outlines the guiding principles that foundation models must adhere to. Section \ref{sec:input-handling} discusses the preprocessing and input mechanisms required to handle variable-length and multivariate time-series, including normalization and padding strategies for both the input sequences and the corresponding ground-truth causal graphs. Section \ref{sec:arch-informer} provides an overview of the model, describing its major computational blocks and their purpose. Section \ref{sec:novel-architecture} introduces a novel LCM design that promises enhanced performance through various architectural refinements. Finally, Section \ref{sec:scope-expansion} presents a preliminary exploration of two natural extensions that highlight the LCM's potential as a more versatile causal foundation model: the integration of interventional samples (Section \ref{subsec:scope-interventions}) and the incorporation of prior knowledge (Section \ref{subsec:scope-prior}). These investigations serve as a proof-of-concept for future comprehensive work. 
+
+
+\input{chapters/architecture/introduction}
+
+\section{Objectives \& Considerations} \label{sec:arch-objectives}
+
+The primary objective of the Large Causal Model (LCM) is to learn a robust and generalizable mapping from multivariate time-series to their corresponding lagged causal graphs. To achieve this, the architecture must satisfy several key desiderata that arise from the challenges of temporal causal discovery under the foundation model paradigm.
+
+First, the model must be capable of learning from highly heterogeneous datasets that vary in size, dimensionality, and underlying temporal dynamics. This diversity demands flexible neural representations that can adapt to varying numbers of variables, time horizons, and sampling frequencies. Second, the model must exhibit strong \textit{generalization} and zero-shot inference capabilities, performing reliably on unseen domains or data distributions outside the training corpus. Third, it must process variable-length input sequences, analogous to how large language models (LLMs) handle text sequences of differing lengths. Finally, inference should be computationally efficient and ideally constant-time with respect to the number of variables, contrasting with the exponential complexity of constraint-based causal discovery algorithms.
+
+These requirements render traditional causal discovery algorithms and classical variational inference approaches inadequate for large-scale, heterogeneous settings. Variational methods, while conceptually elegant, typically operate on single datasets and rely on restrictive assumptions about noise distributions and graph sparsity, limiting their scalability. Consequently, we turn to neural architectures inspired by foundation models in time-series forecasting and natural language processing, where large-scale supervised pretraining has demonstrated powerful generalization properties. In particular, the \textit{Transformer architecture} offers a compelling foundation due to its flexibility, parallelizability, and capacity to capture long-range dependencies.
+
+A central design decision in the LCM is therefore the adoption of a Transformer-based backbone \citep{vaswani2017attention}. The self-attention mechanism underlying Transformers allows efficient modeling of pairwise dependencies across time and variables, while its modular structure scales effectively across dataset sizes and modalities. This flexibility aligns closely with the requirements of temporal causal discovery, where causal effects may occur across arbitrary time lags and between heterogeneous variables. To motivate this choice, we contrast the Transformer with prior neural architectures traditionally used in time-series modeling, namely recurrent networks, convolutional models, and variational inference-based approaches.
+
+\begin{table}[ht!]
+\centering
+\caption{Comparison of candidate neural architectures for temporal causal discovery.}
+\label{tab:arch-comparison}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{p{2.8cm} p{4.2cm} p{5.2cm}}
+\toprule
+\textbf{Architecture} & \textbf{Strengths} & \textbf{Limitations} \\
+\midrule
+RNNs / LSTMs / GRUs \citep{hochreiter1997long, cho2014learning} 
+& Capture sequential order; effective for short-term dependencies. 
+& Sequential updates hinder scalability; vanishing gradients limit long-range modeling; fixed input sizes. \\
+\addlinespace
+Temporal CNNs \citep{oord2016wavenet, bai2018empirical, nauta2019causal} 
+& Parallelizable; dilated convolutions extend receptive field; efficient training. 
+& Local receptive fields; difficulty modeling irregular or long-range causal effects. \\
+\addlinespace
+Variational Methods \citep{lowe2022amortized, yang2021causalvae, deng2022deep, gong2022rhino} 
+& Probabilistic treatment of uncertainty; principled latent structure modeling. 
+& Computationally expensive for large graphs; rigid noise assumptions; limited scalability. \\
+\addlinespace
+Transformers \citep{stein2024embracing, das2024decoder, woo2024unified} 
+& Highly scalable; capture long-range and irregular dependencies; adaptable to heterogeneous data. 
+& High computational cost; careful design of embeddings and normalization required. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Among the architectures explored for temporal representation learning and causal discovery, recurrent models such as LSTMs and GRUs \citep{hochreiter1997long, cho2014learning} were historically favored for their ability to capture sequential dependencies, yet their sequential nature limits scalability and parallelism. Temporal convolutional networks (TCNs) \citep{oord2016wavenet, bai2018empirical, nauta2019causal} introduced dilated convolutions to increase receptive fields, improving efficiency while still struggling with non-stationary or long-range effects. Variational approaches \citep{lowe2022amortized, yang2021causalvae, deng2022deep, gong2022rhino} offer probabilistic interpretability but often suffer from computational inefficiency and restrictive prior assumptions. In contrast, Transformer-based architectures \citep{vaswani2017attention, stein2024embracing, das2024decoder, woo2024unified} have emerged as the most flexible and scalable foundation for temporal causal modeling, capable of capturing heterogeneous, long-range dependencies and supporting large-scale training paradigms such as those employed in Large Causal Models (LCMs).
+
+\textit{Recurrent Neural Networks (RNNs)} and their gated variants, such as \textit{Long Short-Term Memory (LSTM)} \citep{hochreiter1997long} and \textit{Gated Recurrent Units (GRUs)} \citep{cho2014learning}, represent early deep learning approaches to temporal modeling. While well-suited for short-range dependencies, their inherently sequential computation precludes efficient parallelization and introduces training bottlenecks for large-scale data. Furthermore, despite improvements in gating mechanisms, RNNs suffer from vanishing gradient issues that hinder the modeling of long-range dependencies \citep{bengio1994learning}, making them less suitable for discovering causal relations spanning multiple time lags or variable types.
+
+\textit{Convolutional Neural Networks (CNNs)} adapted to sequential data alleviate some of these limitations by enabling parallel computation and expanded receptive fields through dilated convolutions \citep{bai2018empirical}. Temporal CNNs, such as \textit{WaveNet} \citep{oord2016wavenet}, have achieved strong performance in sequence modeling tasks. However, their inductive biases remain inherently local (the scope of dependencies captured is tied to kernel size and dilation rate) which restricts their ability to model irregular or long-range causal effects. Such locality biases are misaligned with causal discovery, where dependencies may exist across non-contiguous time steps or arbitrary variable pairs.
+
+\textit{Variational approaches} to causal discovery conceptualize causal structures as latent variables and optimize corresponding evidence lower bounds (ELBOs) \citep{yang2021causalvae, lowe2022amortized, deng2022deep, gong2022rhino}. Although theoretically principled, they quickly become intractable as the number of variables or maximum lag increases. Moreover, their reliance on dataset-specific optimization and fixed-size input assumptions limits their applicability to heterogeneous temporal data and precludes large-scale pretraining.
+
+\textit{Graph Neural Networks (GNNs)} provide a complementary framework for modeling structured relational data. Their permutation-invariant aggregation mechanisms (such as mean or sum pooling) allow learning representations that respect the symmetries of causal graphs. Recent studies in temporal-spatial causal discovery leverage GNN layers to aggregate information across variables while maintaining temporal coherence \citep{job2025exploring, langbridge2023causal, geffner2024deep}. Inspired by this, our LCM architecture integrates GNN-like aggregation over the feature dimension within the Transformer's attention-based framework, enabling a balance between permutation invariance and expressive temporal modeling. This hybrid design harmonizes the strengths of Transformers and GNNs, offering a unified and scalable architecture for temporal causal discovery.
+
+In contrast, the Transformer offers several properties that are directly aligned with the desiderata of constructing an LCM. The concept of \textit{self-Attention} enables the model to capture long-range and irregular dependencies between variables without explicit assumptions of locality. Parallelization of the self-attention mechanism allows computational scalability to large and diverse datasets, a requirement for training foundation-like causal models. Moreover, by leveraging a large training corpus, Transformers have been shown to perform robust zero-shot generalization to new domains, addressing a core limitation of both classical algorithms and variational methods. For the above reasons, a Transformer backbone is selected, specifically designed for temporal causal discovery, for all introduced models. Table \ref{tab:arch-comparison} summarizes the comparative architectural considerations discussed above.
+
+\begin{table}[ht]
+\centering
+\caption{Design constraints of the LCM architecture. These are engineering limitations that bound input dimensionality and model structure.}
+\label{tab:design-constraints}
+\begin{tabular}{ll}
+\hline
+\textbf{Constraint} & \textbf{Value / Assumption} \\
+\hline
+Maximum Variables & \(V_{\max} = 12\) \\
+Maximum Timesteps & \(L_{\max} = 500\) \\
+Maximum Assumed Lag & \(\ell_{\max} = 3\) \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{table}[ht]
+\centering
+\caption{Causal assumptions underlying the LCM architecture. These are standard assumptions in causal discovery that define the valid regime of learned graphs.}
+\label{tab:causal-assumptions}
+\begin{tabular}{ll}
+\hline
+\textbf{Assumption} & \textbf{Description} \\
+\hline
+Causal Sufficiency & No hidden confounders for any pair of variables \\
+Causal Stationarity & Graph structure does not change over time \\
+No Contemporaneous Effects & \(\forall i \neq j, V^t_i \not\to V^t_j\) \\
+Causal Markov Condition & \(X \perp\!\!\!\perp \text{Non-descendants}(X) \mid \text{Pa}(X)\) \\
+Faithfulness & Observed independencies reflect the true graph \\
+%Time-Series Stationarity & First and second moments are stable across time \\
+\hline
+\end{tabular}
+\end{table}
+
+As with any causal discovery in general, LCMs remain subject to a set of assumptions and design constraints. The most important ones are \textit{design constraints} and \textit{causal assumptions}. Regarding design constraints, we are interested in the maximum allowed dimensions of the input. For instance, text-to-speech neural networks assume a maximum number of tokens or frames that can be processed within an audio sequence, while image recognition models are typically designed for a fixed input resolution (e.g. 224x224 in Resnet \citep{he2016deep}). For our causal discovery task, this corresponds to the maximum number of allowed time-series, timesteps (or sequence length) and the maximum assumed lag for causalities to exist. These causal assumptions and design constraints define the operational regime of our LCMs by determining both the feasible input space and the valid interpretations of discovered causal graphs. Tables \ref{tab:causal-assumptions} and \ref{tab:design-constraints} summarize these assumptions and constraints. Their consideration is pivotal not only for the construction of the training data in Chapter \ref{chap:data} and the model's structure, but also for correct interpretation of the inferred causal graphs and any further causal query. A challenge in this phase is that choosing these limits too conservatively restricts the applicability of the model, while overly generous limits may hurt generalization and reduce scalability due to increased computational demands.
+
+\section{Handling Variable-Length and Multi-variable Sequences} \label{sec:input-handling}
+
+Before elaborating on each separate building block of the neural architecture, we clarify the ability of the model to handle inputs of variable number of time-series and variable number of timesteps. To this end, we adopt a set of \textit{standardized padding strategies}, similarly to \citet{stein2024embracing}, both for the input time-series and the ground truth lagged adjacency tensor. This enables consistent batch processing and generalization of trained models across heterogeneous dataset configurations, as the model is able to handle an input of fixed dimensions. 
+
+To meet the input dimension assumptions, generated time-series samples and ground truth causal graph pairs (both synthetic and simulated from Chapter \ref{chap:data}) are padded to a maximum of \(L_\text{max}\) time-steps and \(V_\text{max}\) variables. The ground truth causal graph is padded up to \(V_{\max}\) variables and \(\ell_{\max}\) lags, while the input time series is padded up to \(V_{\max}\) variables and \(L_{\max}\) timesteps. As described in Table \ref{tab:design-constraints}, our LCMs are designed to handle a maximum of \(V_\text{max} = 12\) variables and \(\ell_\text{max} = 3\) lags.
+
+\subsection{Time-Series Padding}  
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    every node/.style={scale=0.85},
+]
+
+% Time-series matrix
+\matrix (A) [matrix of nodes,
+    nodes={
+        draw, 
+        minimum width=15mm, 
+        minimum height=7mm,
+        align=center,
+        text width=14mm
+    },
+    column sep=1.5mm, row sep=1.5mm
+] at (0,0)
+{
+  $X^1_t$ & $X^2_t$ & $X^3_t$ & $\cdots$ & $\cdots$ & $\mathcal{N}(0,0.01)$ & $\mathcal{N}(0,0.01)$ \\
+  $X^1_{t+1}$ & $X^2_{t+1}$ & $X^3_{t+1}$ & $\cdots$ & $\cdots$ & $\mathcal{N}(0,0.01)$ & $\mathcal{N}(0,0.01)$ \\
+  $\cdots$ & $\cdots$ & $\cdots$ & $\cdots$ & $\cdots$ & $\mathcal{N}(0,0.01)$ & $\mathcal{N}(0,0.01)$ \\
+  $\mathcal{N}(0,0.01)$ & $\cdots$ & $\cdots$ & $\cdots$ & $\cdots$ & $\mathcal{N}(0,0.01)$ & $\mathcal{N}(0,0.01)$ \\
+};
+
+\node[above=2mm of A-1-4] {\footnotesize Observed Time-Series ($V < V_\text{max}$)};
+
+% Red dashed rectangle for right padding columns
+\draw[dashed, thick, red] 
+    (A-1-6.north west) rectangle (A-4-7.south east);
+
+% Red dashed rectangle for bottom padding row
+\draw[dashed, thick, red] 
+    (A-4-1.north west) rectangle (A-4-7.south east);
+
+\node[below=1.6cm of A-3-4] {\footnotesize Gaussian Noise Padding};
+
+\end{tikzpicture}
+\caption{
+Observed time-series matrix padded with Gaussian noise to reach \(L_\text{max}\) (sequence length) and \(V_\text{max}\) (number of variables). Red dashed boxes indicate padded regions.
+}
+\label{fig:input-padding-timeseries}
+\end{figure}
+
+When the number of observed time-steps (samples) \(L\) is less than the configured maximum number of samples \( L_\text{max} \), the time-series is \textit{padded with Gaussian noise \( \mathcal{N}(0,0.01)\) along the time-step dimension}. This prevents introducing zero artifacts, preserving the marginal statistics, and makes the model robust to handling varying sequence lengths. When inputs are longer than the configured maximum (either in time-steps \(L_\text{max}\) or the number of time-series \(V_\text{max}\)), the excess is \textit{truncated} to fit the maximum dimensions. This is conceptually similar to how Foundation models like the GPT family \citep{brown2020language} truncate input lengths that exceed the maximum allowed tokens. The same strategy is applied for interventional samples, illustrated in Figure \ref{fig:input-padding-timeseries}.
+
+\subsection{Causal Graph Padding}  
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    every node/.style={scale=0.85},
+]
+
+% Adjacency Tensor matrix
+\matrix (B) [matrix of nodes,
+    nodes={
+        draw,
+        minimum width=10mm,
+        minimum height=7mm,
+        align=center
+    },
+    column sep=1.5mm, row sep=1.5mm
+] 
+{
+  W & W & W & 0 & 0 \\
+  W & W & W & 0 & 0 \\
+  W & W & W & 0 & 0 \\
+  0 & 0 & 0 & 0 & 0 \\
+  0 & 0 & 0 & 0 & 0 \\
+};
+
+\node[above=2mm of B-1-3] {\footnotesize Lagged Adjacency Tensor ($V < V_\text{max}$)};
+
+% Red dashed rectangle for bottom-right padding
+\draw[dashed, thick, red] 
+    (B-1-4.north west) rectangle (B-5-5.south east);
+
+% Red dashed rectangle for bottom-left padding
+\draw[dashed, thick, red] 
+    (B-4-1.north west) rectangle (B-5-3.south east);
+
+\node[below=0.5cm of B-5-3] {\footnotesize Zero Padding};
+
+\end{tikzpicture}
+
+\caption{2D slice of a lagged adjacency tensor (e.g. lagged adjacency matrix at lag 1) padded with zeros to reach \(V_\text{max}\). Zero-padding is applied when \(V < V_\text{max}\) or \(\ell < \ell_\text{max}\). Red dashed boxes indicate padded regions.}
+\label{fig:input-padding-adjtensor}
+\end{figure}
+
+A similar procedure is applied to the padding of the lagged causal graph. When a dataset comprises fewer variables than \(V < V_\text{max}\) or when the underlying causal structure assumes a lower maximum lag \(\ell < \ell_\text{max}\), the corresponding lagged adjacency tensor is \textit{zero-padded} along the unused variable and lag dimensions. This operation explicitly encodes the absence of nodes or temporal dependencies beyond the observed configuration and, together with the time-series padding described previously, constitutes a critical step for both the training and inference stages. It enables the model to uniformly process time-series and ground-truth causal graph pairs of varying time-step, node, and lag dimensionalities. During \textit{training}, the foundation model receives a time-series input—typically observational—which is propagated through the sequential blocks of the architecture to produce a lagged adjacency tensor representing the confidence of edge existence, as detailed in Section \ref{sec:problem-formulation}. The predicted tensor is subsequently compared to the appropriately padded ground-truth causal graph for loss computation, ensuring consistent alignment across lag dimensions. An illustration of the overall procedure is provided in Figure \ref{fig:input-padding-adjtensor}.
+
+
+\subsection{Min--max Normalization} \label{subsec:min-max-normalization}
+
+To ensure consistent input scaling across heterogeneous datasets and to stabilize training, all time-series variables are subjected to min--max normalization prior to being fed into the LCM, both during training and inference. This normalization step rescales each variable to the range \([0, 1]\), thereby eliminating discrepancies in magnitude that may otherwise bias learning of the internal representations toward variables with larger numerical ranges. Formally, for each variable \(x_v(t)\) in the dataset, the normalized value \(\tilde{x}_v(t)\) is computed as
+
+\begin{equation}
+\tilde{x}_v(t) = \frac{x_v(t) - \min(x_v)}{\max(x_v) - \min(x_v) + \epsilon},
+\end{equation}
+
+where \(\min(x_v)\) and \(\max(x_v)\) denote the minimum and maximum values of variable \(v\) across all timesteps, and a small constant \(\epsilon>0\) is added for numerical stability.  
+
+This step ensures that all variables contribute comparably to the model's embedding and attention layers. During inference, i.e. with the pre-trained model weights at hand and with no ground-truth available, min--max normalization is applied using the statistics computed from the correspoding training set to maintain consistency between training and evaluation distributions.
+
+\section{Overview of the Informer-based LCM} \label{sec:arch-informer}
+
+In this section, we formally describe the underlying mechanisms and design of the LCM architecture, which corresponds to the Informer-based \citep{zhou2021informer} implementation of \citet{stein2024embracing}. Briefly, the building blocks revolve around an Encoder-only Transformer backbone\footnote{An introduction to the Transformer is provided in Appendix \ref{app:transformer}.}, using self-Attention instead of the Sparse Attention of the Informer, with a final feed-forward block adapted for temporal causal discovery. As the scope is not autoregressive sequence generation (i.e. in time-series forecasting or natural language processing), the model does not require a decoder block and only uses the Encoder representations to make edge predictions. Accordingly, full attention is used instead of sparse attention as the time and spaceo complexity gains of the latter are not relevant in this context.
+
+
+\begin{figure}[t!]
+   \centering
+   \hspace*{-0.0612\textwidth}
+   \includegraphics[page=1, width=1.2\textwidth]{images/figures/informer_lcm.pdf}
+ \caption{Overview of the Transformer-based architecture of the LCM, following the Informer \citep{zhou2021informer} variant of \citet{stein2024embracing}. Given a multivariate time-series input of \(L\) timesteps and \(V\) variables, noise padding is performing in the timestep and variable dimensions (Section \ref{sec:input-handling}) up to \(L_{\text{max}}\) and \(V_{\text{max}}\), which are then min--max normalized (Section \ref{subsec:min-max-normalization}). Input embeddings are created using \textit{1D convolutions} and sinusoidal positional encodings. This is followed by a stack of transformer encoder blocks, performing batch normalization, multi-head self-attention and 1D convolutions, along with an \textit{optional distillation block}. Finally, a feedforward block is used to infer a lagged adjacency tensor representation and a sigmoid activation is applied to obtain edge confidence scores.}
+ \label{fig:informer-architecture}
+\end{figure}
+
+Recall from Section \ref{sec:problem-formulation} that the goal of the LCM is to learn a mapping \(f_\theta\) from multivariate time-series inputs to their corresponding lagged causal adjacency graphs, by predicting a \textit{lagged adjacency tensor} \(\hat{\mathbb{A}} \in [0,1]^{V_{\max} \times V_{\max} \times \ell_{\max}}\) where each entry \(\hat{\mathbb{A}}_{ji\tau}\) denotes the probability of edge existence \(i \xrightarrow{\ell_{\max}-\tau} j\). As with any pre-trained neural architecture, we differentiate between the phases/steps:
+
+\begin{enumerate}
+  \item \textit{Training}, where the model is given as input a time-series and a ground truth causal graph pair, and outputs a lagged adjacency tensor of edge existence confidences
+  \item \textit{Inference} or \textit{CD Phase}, where the model is given as input a time-series and outputs a lagged adjacency tensor \(\mathbb{\hat{A}}\) of edge existence confidences, estimating the underlying true lagged causal graph \(\mathcal{G}\) with adjacency tensor \(\mathbb{A}\).  
+\end{enumerate}
+
+The Informer-based architecture of \citet{stein2024embracing} is now described in detail, which serves as the backbone of the Large Causal Models (LCMs) and is illustrated in Figure \ref{fig:informer-architecture}.
+
+\subsection{Input Representations} \label{sec:informer-input-reps}
+
+In the initial input phase, the model receives an (observational) time series sample \(X \in \mathbb{R}^{B \times L \times V}\), where \(B\) denotes the \textit{batch dimension}\footnote{During causal discovery (CD) inference, the batch dimension is typically set to 1.}, \(L\) the \textit{sequence length} (number of timesteps), and \(V\) the \textit{number of variables}. Prior to any transformation, the inputs are min-max normalized. The normalized inputs are then padded along both the variable and temporal dimensions to ensure fixed dimensions \(V=V_{\max}\) and \(L=L_{\max}\), with sequences exceeding this length are truncated to \(L_{\max}\), as detailed in Section \ref{sec:input-handling}.
+
+Each variable's time series is embedded into a higher-dimensional latent space using a 1D convolutional projection, serving as a learnable feature extractor. The convolution operates along the temporal dimension, with \(c_\text{in}=V_{\max}\) input channels and \(c_\text{out}=d_{\text{model}}\) output channels, where \(d_{\text{model}}\) denotes the \textit{model dimension}. The resulting \textit{token embeddings} are represented as
+
+\begin{equation}
+X_{\text{tok}} = \text{Conv1D}(X),
+\end{equation}
+
+yielding a tensor \(X_{\text{token}} \in \mathbb{R}^{B \times L_{\max} \times d_{\text{model}}}\). This operation captures local temporal dependencies and smooths short-range fluctuations, providing robust contextual embeddings for subsequent attention mechanisms.
+
+Since the Transformer architecture is permutation-invariant with respect to sequence order, explicit positional information must be added to the learned embeddings. As in the vanilla Transformer by \citet{vaswani2017attention}, sinusoidal positional encodings aim to inject absolute temporal position information into the convolutional embeddings. Specifically, for each timestep \(t \in \{1, \ldots, L\}\) and embedding dimension index \(j \in \{1, \ldots, d_{\text{model}}\}\), the positional encoding is defined as:
+
+\begin{equation}
+\begin{aligned}
+\mathrm{PE}_{(t, 2i)}   &= \sin\!\left(\frac{t}{10000^{2i/d_{\text{model}}}}\right), \\
+\mathrm{PE}_{(t, 2i+1)} &= \cos\!\left(\frac{t}{10000^{2i/d_{\text{model}}}}\right),
+\end{aligned}
+\end{equation}
+
+which are added element-wise to the learnable token embeddings:
+
+\begin{equation}
+X_{\text{emb}} = X_{\text{token}} + \mathrm{PE}.
+\end{equation}
+
+Dropout is applied to \(X_{\text{emb}}\) to improve generalization, and the resulting embeddings are reshaped and organized as \([B, L, d_{\text{model}}]\), serving as the input to the Encoder block of the Transformer.
+
+\subsection{Transformer Encoder}
+
+The encoded sequence \(X_{\text{emb}}\) is then processed by a stack of Informer-style Transformer encoder blocks. Each encoder blocks consists of a self-attention layer followed by a convolutional feed-forward network. Let \(E^{(l)}\) denote the input to the \(l\)-th encoder layer. Then each encoder layer computes
+
+\begin{equation}
+\begin{aligned}
+E'^{(l)} &= \mathrm{LayerNorm}\big(E^{(l)} + \mathrm{SelfAttn}(E^{(l)})\big), \\
+E^{(l+1)} &= \mathrm{LayerNorm}\big(E'^{(l)} + \mathrm{FFN}(E'^{(l)})\big),
+\end{aligned}
+\end{equation}
+
+where \(\mathrm{SelfAttn}(\cdot)\) denotes multi-head self-attention scaled by \(1/\sqrt{d_{\text{model}}}\) as per \citet{vaswani2017attention} and \(\mathrm{FFN}(\cdot)\) represents a two-layer convolutional feed-forward block defined as
+
+\begin{equation}
+\mathrm{FFN}(x) = \mathrm{Conv1D}_2\!\left( \mathrm{GELU}\!\big(\mathrm{Conv1D}_1(x)\big) \right),
+\end{equation}
+
+applied independently at each temporal position. This convolutional replacement of the standard linear MLP (as introduced in the Informer model) allows for localized feature extraction and temporal smoothing, aiming to improve efficiency on long sequences. Each encoder block uses residual connections \citep{he2016deep} and layer normalization \citep{ba2016layer, xiong2020layer} after both the attention and feed-forward sublayers, ensuring stable gradient propagation across stacked layers.
+
+Between successive encoder blocks, an optional \textit{self-attention distillation layer} is optionally inserted to reduce the temporal resolution, as proposed in the Informer model. In this work, distillation layer is included in all trained models. Specifically, a convolutional downsampling followed by normalization and activation is applied:
+
+\begin{equation}
+X_{\text{distil}} = \mathrm{MaxPool}\!\left( \mathrm{ELU}\!\big( \mathrm{BatchNorm}\!\big( \mathrm{Conv1D}(E^{(l)}) \big) \big) \right)
+\end{equation}
+
+which halves the temporal dimension and improves computational efficiency. Let \(E_{\text{enc}} \in \mathbb{R}^{B \times L' \times d_{\text{model}}}\) denote the encoder output after the final block, where \(L' < L\) if temporal distillation is applied. Importantly, only the final timestep embedding is retained for causal prediction, \(h = E_{\text{enc}}[:, -1, :] \in \mathbb{R}^{B \times d_{\text{model}}}\).
+
+\subsection{Correlation Injection} \label{subsec:ci}
+
+In an attempt to further assist the model in inferring directed dependencies, \citet{stein2024embracing} introduce a technique to inject prior statistical measures into the model, to improve performance and avoid inferring spurious relationships, as a form of \textit{training aids}. These statistical measures take the form of lagged cross-correlations between variables. For each pair \((X^i, X^j)\) and lag \(\tau \in \{1, \ldots, \ell_{\max}\}\), the empirical Pearson cross-correlation is computed as
+
+\begin{equation}
+\rho_{X^i, X^j}(\tau) = \frac{\mathrm{Cov}(X^i_{1:T-\tau}, X^j_{\tau+1:T})}{\sqrt{\mathrm{Var}(X^i_{1:T-\tau}) \, \mathrm{Var}(X^j_{\tau+1:T})}}
+\end{equation}
+
+The resulting tensor of correlations \(\mathbb{C} \in \mathbb{R}^{B \times V_{\max} \times V_{\max} \times \ell_{\max}}\) is flattened to \(\mathbb{R}^{B \times (V_{\max}^2 \cdot \ell_{\max})}\) and concatenated to the encoder representation (as shown in Figure \ref{fig:informer-architecture}):
+
+\begin{equation}
+h' = \mathrm{Concat}(h, \mathrm{Flatten}(\mathbb{C})) \in \mathbb{R}^{B \times (d_{\text{model}} + V_{\max}^2 \cdot \ell_{\max})}
+\end{equation}
+
+In Chapter \ref{chap:results}, we thoroughly evaluate the effect of correlation injection features on the performance of LCMs, filling a gap that was previously unexplored in the literature, although the authors report that this approach is effective.
+
+\subsection{Feedforward Prediction Head}
+
+The concatenated representation \(h'\) is then processed by a two-layer feed-forward prediction head to map latent representations to \textit{lagged adjacency predictions}. Formally,
+
+\begin{equation}
+\begin{aligned}
+h_1 &= \mathrm{ELU}\!\left( \mathrm{BatchNorm}\!\left( \mathrm{Linear}_1(h') \right) \right), \\
+h_2 &= \mathrm{Linear}_2(h_1),
+\end{aligned}
+\end{equation}
+
+where \(\mathrm{Linear}_1 : \mathbb{R}^{d_{\text{in}}} \rightarrow \mathbb{R}^{d_{\text{ff}}}\) and \(\mathrm{Linear}_2: \mathbb{R}^{d_{\text{ff}}} \rightarrow \mathbb{R}^{V_{\max}^2 \cdot \ell_{\max}}\). The output is reshaped to form the predicted lagged adjacency tensor
+
+\begin{equation}
+\hat{\mathbb{A}} \;=\; \sigma\left( \mathrm{Reshape}\!\big(h_2\big) \right) \in [0,1]^{V_{\max} \times V_{\max} \times \ell_{\max}}
+\end{equation}
+
+where \(\sigma(x) = (1 + e^{-x})^{-1}\) is the sigmoid transformation and each element \(\hat{\mathbb{A}}_{ij\tau}\) represents the confidence of the model that a directed edge \(X^i_{t-\tau} \rightarrow X^j_t\) exists. The final sigmoid activation converts logits into interpretable probabilities of causal edge existence.
+
+The cautious reader should notice that instead of a softmax to convert the final logits into probabilities (as in the vanilla transformer), a sigmoid is used. A sigmoid is appropriate for \textit{binary} or \textit{multi-label classification} problems where each output can be viewed as an independent Bernoulli event, while softmax is appropriate for multi-class classification where only one class is active at a time.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Towards a novel LCM architecture} \label{sec:novel-architecture}
+
+The aim of this section is to propose a new neural architecture for temporal causal discovery, as a successor to the Informer-based LCM model introduced earlier. Our scope is to develop an expressive model that better captures both temporal and inter-variable dependencies based on novel advances in the state-of-the-art of neural networks, while also integrating auxiliary signals such as lagged crosscorrelations described previously.
+
+
+\begin{figure}[ht!]
+   \centering
+   \hspace*{-0.0612\textwidth}
+   \includegraphics[page=1, width=1.2\textwidth]{images/figures/patchtstspacetime_lcm.pdf}
+ \caption{Overview of a novel architecture for temporal causal discovery. Each time-series is split into patches, which are then projected using linear embeddings \textit{(Patch Embeddings)}. Standard sinusoidal positional encodings are added, together with variable embeddings (for carrying variable identity information) and passed through a stack of transformer encoder blocks, consisting of Temporal \& Spatial multi-head attention. The resulted outputs are concatenated with crosscorrelation statistical measures \textit{(training aids)} as a way to further increase the expressiveness of the model. They are finally processed through a feedforward head and a sigmoid activation to predict a lagged adjacency tensor \(\hat{\mathbb{A}} \in \mathbb{R}^{V_{\max} \times V_{\max} \times \ell_{\max}}\) that represents the discovered lagged causal graph.}
+ \label{fig:lcm_novel-architecture}
+\end{figure}
+
+An overview of the proposed model is shown in Figure \ref{fig:lcm_novel-architecture}. Conceptually, the design follows four sequential stages, as in the Informer-based LCM: (i) \textit{Input preprocessing and patch embeddings} where the multivariate time-series is normalized, divided into overlapping temporal patches, and projected into a latent embedding space enriched with positional and variable identity information, (ii) \textit{Transformer Encoder with decoupled temporal and spatial attention}, using alternating self-attention over time and variables to jointly learn dynamic and cross-variable dependencies, (iii) \textit{auxiliary inputs} where lagged crosscorrelation is concatenated alongside the learned representations to guide causal learning and (iv) \textit{prediction head} serving as a feedforward projection using a SwiGLU \citep{shazeer2020glu} activation and a sigmoid output to yield the lagged causal adjacency tensor \(\hat{\mathbb{A}} \in [0,1]^{V_{\text{max}} \times V_{\text{max}} \times \ell_{\text{max}}}\) representing the probability of causal influence across variables and lags.
+
+\subsection{Input representations}  \label{sec:input-representations}
+
+As in the Informer-based LCM, the model receives an (observational) time-series sample \(X \in \mathbb{R}^{B \times L \times V}\)
+where \(B\) denotes the batch size, \(L\) the sequence length (timesteps), and \(V\) the number of variables. \(X\) is min-max normalized and padded as detailed in Sections \ref{sec:input-handling} and \ref{subsec:min-max-normalization}. 
+
+%\subsection{Patching}
+
+Instead of processing individual timesteps directly as before, the model employs a \textit{patching mechanism} \citep{nie2023time}, transforming each variable's sequence into overlapping windows of length \(\rho\) and stride \(s\):
+
+\begin{equation}
+L' = \left\lfloor \frac{L - \rho}{s} \right\rfloor + 1
+\end{equation}
+
+Each variable's sequence is split independently, yielding an intermediate tensor representation \([B, V_{\max}, L', \rho]\) which is afterwards reshaped into an embedding representation \([B \cdot V_{\max}, L', \rho]\). This operation reduces the effective sequence length while simultaneously allowing each patch to encapsulate short-term temporal dynamics, enabling efficient modeling of long-range dependencies.
+
+%\subsection{Patch Embeddings}
+
+Each patch \(P \in \mathbb{R}^{\rho}\) is then projected to the model dimension \(d_\text{model}\) via a learnable linear transformation:
+
+\begin{equation}
+\hat{P} = W_P P + b_P, \quad W_P \in \mathbb{R}^{d_{\text{model}} \times \rho}
+\end{equation}
+
+where \(W_P\) and \(b_P\) are learnable parameters. To preserve temporal order across patches, \textit{sinusoidal positional encodings} \citep{vaswani2017attention} are added element-wise, as defined previously in Section \ref{sec:informer-input-reps}:
+
+\begin{equation}
+\hat{P}^{\text{pos}} = \hat{P} + \mathrm{PosEmb}(\ell)
+\end{equation}
+
+where \(\ell\) indexes the position of the patch within the sequence. Each variable is also assigned a learnable \textit{variable embedding} \(e_j \in \mathbb{R}^{d_{\text{model}}}\), shared across patches, encoding variable identity information and facilitating inter-variable disambiguation. The final embedding sequence
+
+\begin{equation}
+X_{\text{emb}} \in \mathbb{R}^{B \times L' \times V_{\max} \times d_{\text{model}}}
+\end{equation}
+
+is obtained after dropout regularization \citep{srivastava2014dropout} and reshaping, and serves as the input to the Encoder block.
+
+\subsection{Encoder block}
+
+The encoder consists of (N) identical blocks. Each block alternates \textit{temporal attention} (multi-head attention across patches within each variable) and \textit{spatial attention} (multi-head attention across variables within a patch). This decoupling allows the model to explicitly disentangle intra-variable temporal dynamics from inter-variable dependencies. Specifically, for each variable \(i\), temporal attention is computed as:
+
+\begin{equation}
+\text{TemporalAttn}^i = \text{MultiHeadAttn}(Q^i, K^i, V^i)
+\end{equation}
+
+resulting in \(X \in \mathbb{R}^{B \times P \times V_{\max} \times d_{\text{model}}} \). To enhance \textit{permutation equivariance across features}, a permutation-equivariant transformation \(\phi\) is introduced, followed by \textit{mean pooling} across the variable dimension:
+
+\begin{equation}
+X_{\text{agg}} = \frac{1}{V_{\text{max}}}\sum_{i=1}^{V_{\text{max}}} \phi(X_i)
+\end{equation}
+
+inspired by Deep Sets \citep{zaheer2017deep}. This global summary is added back to the temporally attended features and normalized:
+
+\begin{equation}
+X' = \text{LayerNorm}(X + X_{\text{agg}})
+\end{equation}
+
+The updated representations are then passed through \textit{spatial attention}, \textit{layer normalization} and a \textit{feedforward network}:
+
+\begin{equation}
+\text{FF}(x) = W_2 , \mathrm{GeLU}(W_1 x + b_1) + b_2
+\end{equation}
+
+each wrapped with residual connections. It should be noted that since a feedforward network is applied, no permutation equivariance is preserved, although the transformation \(\phi\), together with mean pooling aim towards a permutation-equivariant model. Finally, temporal aggregation is performed by mean-pooling across patches:
+
+\begin{equation}
+\bar{X} = \frac{1}{L'} \sum_{p=1}^{L'} X_{:,p,:,:} \in \mathbb{R}^{B \times V_{\max} \times d_{\text{model}}}
+\end{equation}
+
+Since our objective is not sequence generation, no decoder block is used (as in Section \ref{sec:arch-informer}). The encoder's output logits directly represent causal feature interactions.
+
+\subsection{Auxiliary Inputs}
+
+\begin{equation}
+\rho_{X^i,X^j}(\tau) = \frac{\mathrm{Cov}(X^i_{1:T-\tau}, X^j_{\tau+1:T})}{\sqrt{\mathrm{Var}(X^i_{1:T-\tau}) , \mathrm{Var}(X^j_{\tau+1:T})}}
+\end{equation}
+
+for \(\tau = 1, \dots, \ell_{\max}\). These are assembled into \(\mathbb{C} \in \mathbb{R}^{B \times V_{\max} \times V_{\max} \times \ell_{\max}}\), flattened, and concatenated to the logits of the final encoder block
+
+\begin{equation}
+Z = \mathrm{Concat}(X_{\text{enc}}, \mathbb{C})
+\end{equation}
+
+
+\subsection{Feedforward Prediction Head}
+
+The concatenated representation is projected through a two-layer feedforward head with layer normalization and \textit{SwiGLU activation} \citep{shazeer2020glu}, followed by a sigmoid transformation:
+
+\begin{equation}
+\hat{\mathbb{A}} = \sigma\left(\text{reshape}\left(W_2 \cdot \text{SwiGLU}\big(\text{LN}(W_1 Z + b_1)\big) + b_2 \in [0,1]^{B \times V_{\max} \times V_{\max} \times \ell_{\max}} \right)\right)
+\end{equation}
+
+where the SwiGLU activation is defined as
+
+\begin{equation}
+  \text{SwiGLU}(x) = (xW_1) \odot \text{SiLU}(xW_2),
+\end{equation}
+
+where \(W_1\) and \(W_2\) are learned projection matrices, and \(\odot\) denotes elementwise multiplication. The function \(\text{SiLU}(z) = z \cdot \sigma(z)\) denotes the \textit{Sigmoid Linear Unit} (also known as the \textit{Swish} activation), which combines linear gating with smooth nonlinear modulation, leading to improved gradient flow and expressivity compared to standard activations such as ReLU or GELU. 
+
+The output tensor \(\hat{\mathbb{A}}\) is interpeted in the same manner as in the Informer-based model in Section \ref{sec:arch-informer}.
+
+\section{Expanding the Scope of LCMs} \label{sec:scope-expansion}
+
+This section explores two complementary extensions for causal foundation models, the incorporation of \textit{interventional samples} and \textit{prior knowledge}, in Subsection \ref{subsec:scope-interventions} and Subsection \ref{subsec:scope-prior}, respectively.
+
+\subsection{Towards Incorporating Interventional Samples} \label{subsec:scope-interventions}
+
+A central motivation in causal discovery is to move beyond mere association and towards identifiability of the underlying causal graph. While observational data allow the estimation of correlations and potential dependencies, they are insufficient to fully resolve causal directions in many cases due to the problem of statistical indistinguishability among Markov-equivalent structures. As an example in the i.i.d. setting, two variables \(X\) and \(Y\) may be highly correlated, yet share an unobserved common cause. If a CD algorithm assumes causal sufficiency (Section \ref{sec:setting} \& Table \ref{tab:causal-assumptions}), then an edge from \(X\) to \(Y\) will be identified. To overcome this limitation, interventional data play a critical role: by intervening on \(X\) and observing \(Y\), it is becomes possible to resolve the causal direction. Practical examples include controlled modifications in software configuration parameters for AIOps, targeted marketing campaigns in economics or knockout experiments in biological networks. By explicitly introducing interventions in the model, the model is provided with more informative samples that aims to improve causal identifiability.
+
+To accomplish this, we accompany each input batch with a \textit{binary interventional matrix} \(B_{K \times V} \in {0, 1}\) such that 
+
+\begin{equation}
+B_{ij} =
+\begin{cases}
+1, & \text{if variable } V_j \text{ was directly intervened at timestep } i, \\
+0, & \text{if } V_j ~\text{remained observational at timestep } i
+\end{cases}
+\end{equation}
+
+where \(K\) denotes the number of interventional time-steps and \(V\) the number of variables. Thus, \(B_{ij} = 1\) can be interpreted as a \textit{masking operation}, indicating that the corresponding observation no longer reflects the natural dependency structure, as the variable's causal parents have been disrupted by an external intervention. As in the observational inputs, the interventional samples are padded as per Section \ref{sec:input-handling}, while the interventional matrix is padded with zeros where needed, to match the maximum number of time-steps \(K_\text{max}=L_\text{max}\) and variables \(V_\text{max}\).
+
+\begin{figure}[h!]
+   \centering
+   \hspace*{-0.0612\textwidth}
+   \includegraphics[page=1, width=1.2\textwidth]{images/figures/interv-integration.pdf}
+   \vspace{-10pt}
+   \caption{Integration of interventional samples in an LCM. Each input time series is accompanied by a binary interventional mask \(B\), which encodes which variables were externally manipulated. The mask is concatenated with the encoder outputs, allowing the model to condition the following prediction layers based on the context of interventions.}
+ \label{fig:interv-integration}
+\end{figure}
+
+During both training and inference, the (padded) binary interventional mask \(B_{K_\text{max} \times V_\text{max}}\), together with interventional samples are concatenated with the encoded latent representation of the input time series (Figure \ref{fig:interv-integration}). Formally, for a given encoder output \(\mathbf{H}\), the augmented representation becomes 
+
+\begin{equation}
+\mathbf{H'} = \text{Concat}(\mathbf{H}, B)
+\end{equation}
+
+where \(B\) is broadcast or flattened to match the structure of \(\mathbf{H}\). This augmentation allows the downstream attention and prediction layers to explicitly condition on which variables were intervened upon, thereby guiding the network to adjust its learned dependencies accordingly. 
+
+In essence, the model already learns, up to the final encoder block, to identify causal relationships. From there, the augmentation of the output is fed into the feedforward prediction head, which aims to further refine the prediction of the true causal directions by differentiating between observational and interventional examples. Over many such interventional samples, the model learn to internalize which dependencies are consistent under both observational and interventional conditions, yielding more accurate and identifiable causal graphs. The combination of interventional and observational data thus aims to extend the scope of neural foundation models beyond observational data alone.
+
+
+\subsection{Towards Incorporating Prior Knowledge} \label{subsec:scope-prior}
+
+In many real-world domains, partial knowledge of causal relationships is often available or can be constructed manually by experts. This information can come in the form of known causal edges or paths (i.e. (“\(A\) causes \(B\)”)) or exclusions (“\(A\) does not cause \(B\)”), and may include varying degrees of confidence. Incorporating such domain knowledge into a neural causal discovery model can improve interpretability and robustness, especially under limited data or noisy observational settings. However, unlike constraint-based algorithms such as PCMCI \citep{runge2018causal} which can directly encode hard constraints, neural architectures exhibit intrinsic stochasticity and non-linearity that make strict enforcement of such constraints impractical. 
+
+To incorporate domain information into the model, prior knowledge is injected after the last encoder block (in a similar manner to correlation injection and handling of interventions), allowing the model to refine its learned representations to more plausible causal structures without constraining it from the beginning. Prior information is provided either in edges and paths (edges are a special case of paths with length 1). By path, we mean a sequence of edges in the lagged causal graph of the form \( X^{i}_{t-2} \rightarrow X^{j}_{t-1} \rightarrow X^{k}_{t}\) where \(t \in \mathbb{N}\). The assumption of causal stationarity also applies to paths, making them time-invariant.
+
+\begin{figure}[t!]
+  \centering
+  \hspace*{-0.0612\textwidth}
+  \includegraphics[page=1, width=1.2\textwidth]{images/figures/prior-integration.pdf}
+  \caption{Integration of prior knowledge in an LCM. Prior tensors \(\mathcal{P}\) and belief masks \(\mathcal{B}\) are flattened and concatenated with the encoder output, aiming to provide soft inductive biases toward known or excluded edges and paths. This enables the model to learn causal structures that are consistent with provided knowledge while remaining data-adaptive.}
+  \label{fig:prior-integration}
+\end{figure}
+
+Specifically, information about priors is represented by two tensors: (i) a \textit{prior tensor} \(\mathcal{P} \in \left\{0,1,2\right\}^{V_{\max} \times V_{\max} \times \ell_{\max}}\) and (ii) a \textit{belief strength mask} \(\mathcal{B} \in [0,1]^{V_{\max} \times V_{\max} \times \ell_{\max}}\), associating each entry of \(\mathcal{P}\) with a strength of knowledge for each edge/path. Both \(\mathcal{P}\) and \(\mathcal{B}\) share the same semantics as the adjacency tensor representation in Section \ref{sec:problem-formulation}. Information in \(\mathcal{P}\) is encoded as follows:
+
+\begin{equation}
+\mathcal{P}_{ji\ell} =
+\begin{cases}
+0, & \text{no prior knowledge available},\\
+1, & \text{if edge/path \(X^i_{t-\ell} \rightarrow X^j_t\) is known to exist - inclusion prior},\\
+2, & \text{if edge/path \(X^i_{t-\ell} \rightarrow X^j_t\) is known to not exist - exclusion prior}
+\end{cases}
+\end{equation}
+
+where the above formulation possesses the same semantics as our the adjacency tensor representation of the causal graph and accounts for paths up to \(\ell_{\max}\).
+
+The prior information is flattened and concatenated with the output of the final encoder block, similarly to the case of interventions, as illustrated in Figure \ref{fig:prior-integration}. As it should be clear so far to the cautious reader, these two auxiliary prior inputs are provided during both inference and training, following a methodology described in Section \ref{sec:training-prior} of Chapter \ref{chap:training}.
