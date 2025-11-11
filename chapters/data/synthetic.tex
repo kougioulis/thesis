@@ -4,11 +4,11 @@ Recall from Chapter \ref{chap:problem-formulation} that we formulate causal mech
 
 To illustrate sample generation, consider a simple i.i.d. example with three variables \(X, Y, Z\) and the causal DAG described by the collider \(X \rightarrow Z \leftarrow Y\). This causal graph is associated with the functional dependency \(Z := f(X,Y,\epsilon_Z)\) and noise distributions \(X \sim \epsilon_X\), \(Y \sim \epsilon_Y\). Observational samples are obtained by respecting the topological order of the DAG and generating samples recursively over the descendants (similar to ancestral sampling in latent variable models \citep{murphy2023probabilistic}). For instance, one sample may be \(X = 0.02, Y=0.12\) and \(Z = f(0.02,0.12,0.03) = 1\), where values from the noise distributions are substituted into the functional dependencies.
 
-The topology of each synthetic SCM depends on the random graph generation method. Two main methods exist for random DAG generation in the literature. The first follows the \textit{Ed\H{o}s-Renyi (ER)} paradigm \citep{fienberg2012brief}, as in \citet{hagberg2008exploring}, with variations also used by \citet{brouillard2020differentiable} and \citet{ke2022learning}. Generation begins with an empty graph for a given number of nodes, then randomly and equiprobably picks directed edges to add based on a probability \(p\). Unlike \citet{hagberg2008exploring}, acyclicity checks are applied to reject edges that would introduce cycles, as shown in Algorithm \ref{alg:erdos-renyi}. This process produces approximately uniform node degree distributions.
+The topology of each synthetic SCM depends on the random graph generation method. Two main methods exist for random DAG generation in the literature. The first follows the \textit{Erd\H{o}s-Renyi (ER)} paradigm \citep{fienberg2012brief}, as in \citet{hagberg2008exploring}, with variations also used by \citet{brouillard2020differentiable} and \citet{ke2022learning}. Generation begins with an empty graph for a given number of nodes, then randomly and equiprobably picks directed edges to add based on a probability \(p\). Unlike \citet{hagberg2008exploring}, acyclicity checks are applied to reject edges that would introduce cycles, as shown in Algorithm \ref{alg:erdos-renyi}. This process produces approximately uniform node degree distributions.
 
 The second approach, the \textit{Barab{\'a}si-Albert (BA)} algorithm \citep{hagberg2008exploring,barabasi1999emergence}, generates scale-free graphs whose degree distribution follows a power law. Such networks exhibit a “rich-get-richer” phenomenon where a few nodes accumulate disproportionately many connections, a property often seen in real-world networks like social graphs.
 
-In our experiments, we adopt the \textit{Ed\H{o}s-Renyi} method for generating \textit{random lagged temporal causal graphs} (Figure \ref{fig:temporal-graphs} (a)), as it allows fine-grained control over edge probabilities and density. In time-series settings, the additional temporal dimension must be considered. Since we are interested in lagged causal graphs, Algorithm \ref{alg:erdos-renyi} is adapted as follows: the number of nodes \(V\) is sampled from a discrete uniform distribution \(\mathcal{U}(V_\text{min}, V_\text{max})\), the edge probability \(p\) from \(\mathcal{U}(0, 1)\), and the maximum causal effect lag \(\ell_\text{max}\) from \(\mathcal{U}(1, \ell_\text{max})\). The resulting time-lagged graph contains \(V \cdot \ell_\text{max}\) lagged nodes at timesteps \(\tau=1, \dots, \ell_\text{max}\) and \(V\) nodes at the current timestep \(\tau=t\). Directed edges (heading forward through time) are added randomly according to the chosen \(p\), ensuring acyclicity. Furthermore, \textit{no contemporaneous edges are assumed}, i.e., edges of the form \(V^i_l - V^j_l\) do not exist.
+In our experiments, we adopt the \textit{Erd\H{o}s-Renyi} method for generating \textit{random lagged temporal causal graphs} (Figure \ref{fig:temporal-graphs} (a)), as it allows fine-grained control over edge probabilities and density. In time-series settings, the additional temporal dimension must be considered. Since we are interested in lagged causal graphs, Algorithm \ref{alg:erdos-renyi} is adapted as follows: the number of nodes \(V\) is sampled from a discrete uniform distribution \(\mathcal{U}(V_\text{min}, V_\text{max})\), the edge probability \(p\) from \(\mathcal{U}(0, 1)\), and the maximum causal effect lag \(\ell_\text{max}\) from \(\mathcal{U}(1, \ell_\text{max})\). The resulting time-lagged graph contains \(V \cdot \ell_\text{max}\) lagged nodes at timesteps \(\tau=1, \dots, \ell_\text{max}\) and \(V\) nodes at the current timestep \(\tau=t\). Directed edges (heading forward through time) are added randomly according to the chosen \(p\), ensuring acyclicity. Furthermore, \textit{no contemporaneous edges are assumed}, i.e., edges of the form \(V^i_l - V^j_l\) do not exist.
 
 The \textit{Barab{\'a}si-Albert} model, while useful for studying scale-free networks, tends to create overly connected hubs that are less representative of causal graphs in scientific domains, and is therefore left unconsidered.
 
@@ -88,14 +88,14 @@ To prevent pathological graph densities, \(p_\text{edge}\) is scaled adaptively 
 \toprule
 \textbf{Family} & \textbf{Functional form} & \textbf{Description} \\
 \midrule
-Linear & \( f(x) = a x + b \) & Additive linear effect \\
-       & \( f(x_1, x_2) = a_1 x_1 + a_2 x_2 + b \) & Linear combination of parents \\
+Linear & \(f(x) = a x + b\); & Additive linear effect \\
+       & \(f(x_1, x_2) = a_1 x_1 + a_2 x_2 + b\) & Linear combination of parents \\
 \midrule
-Non-linear & \( f(x) = \alpha_nx^n + \ldots \alpha_0x_0 \) & Polynomial \\
-           & \( f(x) = e^x \) & Exponential Transformation \\
-           & \( f(x) = \sin(x) \) & Sinusoidal \\
-           & \( f(x_1, x_2) = x_1 x_2 \) & Multiplicative interaction \\
-           & \( f(x) = \log(1 + |x|) \) & Logarithmic transformation \\
+Non-linear & \(f(x) = \alpha_nx^n + \ldots \alpha_0x_0 \); & Polynomial \\
+           & \(f(x) = e^x \); & Exponential Transformation \\
+           & \(f(x) = \sin(x)\); & Sinusoidal \\
+           & \(f(x_1, x_2) = x_1 x_2\); & Multiplicative interaction \\
+           & \(f(x) = \log(1 + |x|)\); & Logarithmic transformation \\
 \midrule
 Bounded & \( f(x) = \tanh(x) \) & Hyperbolic tangent (bounded in \([-1,1]\)) \\
         & \( f(x) = \sigma(x) \) & Sigmoid \( \big(\frac{1}{1+e^{-x}}\big) \) \\
@@ -105,7 +105,7 @@ Bounded & \( f(x) = \tanh(x) \) & Hyperbolic tangent (bounded in \([-1,1]\)) \\
 
 \begin{table}[h]
 \centering
-\caption{Noise distributions used in synthetic SCMs (fill in as needed).} \label{tab:noise-dists}
+\caption{Noise distributions used in synthetic SCMs.} \label{tab:noise-dists}
 \begin{tabular}{lll}
 \toprule
 \textbf{Name} & \textbf{Distribution} & \textbf{Parameters} \\

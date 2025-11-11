@@ -1,0 +1,211 @@
+\section{Curating Training \& Evaluation Data Pairs} \label{sec:data-training}
+
+In this section we provide an overview of the data curation process used to generate the data pairs used for training and evaluation of our LCMs. Three different types of datasets are considered: synthetic (following Section \ref{sec:data-synthetic}), simulated (following Section \ref{sec:data-simulated}) and semi-synthetic. Sections \ref{subsec:data-training-semisynth}, \ref{subsec:data-training-synth} and \ref{subsec:data-training-sim} provide a detailed description of each category of data corpora considered.
+
+\subsection{Semi-synthetic} \label{subsec:data-training-semisynth}
+
+For inference and evaluation purposes, we additionally consider \textit{semi-synthetic} data collections, which combine mechanistic or physically motivated processes, constructed using either domain knowledge or known physical models. Such datasets provide an intermediate bridge between fully synthetic causal structures (where ground truth is known by construction) and real-world observational data (where causal ground truth is unknown or uncertain). 
+
+The \textit{\(f\)MRI} datasets are based on the collection introduced by \citet{smith2011network}, simulating blood-oxygen-level dependent (BOLD) responses across multiple brain regions. Each dataset models the neural activation time-series of a set of interconnected brain regions, with inter-regional causal connectivity defined according to a ground-truth directed network and the hemodynamic response modeled by the non-linear balloon model of \citet{buxton1998dynamics}. This results in temporally smooth, non-linearly coupled time-series that realistically emulate the noise and temporal dependencies observed in empirical \(f\)MRI recordings.  
+
+From the full available collection of 27 datasets with 5, 10 and 15 variables, with sample lengths ranging from 50 to 5000 time steps, we restrict attention to datasets containing at least 500 observations, and exclude the 15-dimensional case to align with our input dimension constraints. This yields a final subset of 26 datasts, denoted as the \textit{\(f\)MRI} collection. The \textit{\(f\)MRI5} collection represents a smaller subset including only 5-dimensional networks. 
+
+To complement the limited number of \(f\)MRI datasets and further assess the ability of our LCMs to capture complex, nonlinear dynamics, we also include semi-synthetic data generated from the Kuramoto model of coupled phase oscillators \citep{kuramoto1975self}. Briefly, the Kuramoto model describes the time evolution of oscillator phases \(\theta_i(t)\) as
+
+\begin{equation}
+\frac{d\theta_i}{dt} = \omega_i + \frac{K}{N} \sum_{j=1}^{N} a_{ij} \sin(\theta_j - \theta_i),
+\end{equation}
+
+where \(\omega_i\) represents the intrinsic frequency of oscillator \(i\), \(K\) controls the coupling strength, and \(a_{ij}\) encodes the adjacency (causal) structure of interactions among oscillators. The implementation from \citet{lowe2022amortized} is adopted, generating both 5-variable and 10-variable configurations with 1000 realizations each and a fixed maximum lag of 1. 
+
+For all considered semi-synthetic datasets, the known causal connectivity is provided in the form of directed adjacency matrices, which we convert into the lagged adjacency tensor representation described in Section \ref{sec:problem-formulation} and Chapter \ref{chap:architecture} to enable correct comparison of the ground truth with the output of our LCMs. An overview of all semi-synthetic dataset collections is presented in Table \ref{tab:semi-synthetic-datasets}.
+
+\begin{table}[!t]
+\centering
+\small
+\caption{Overview of semi-synthetic time-series dataset collections.}
+\vspace{5pt}
+\begin{tabular}{|c|c|c|c|c|c|}
+\hline
+\textbf{Collection} & \textbf{Datasets} & \textbf{Vars} & \textbf{Timesteps} & \textbf{Max Lag} & \textbf{Rels.} \\
+\hline
+\(f\)MRI5 & 21 & 5 & 1200--5000 & 1 & Non-linear \\
+\(f\)MRI & 26 & 5--10 & 1200--5000 & 1 & Non-linear \\
+\(\text{Kuramoto}5\) & 1000 & 5 & 500 & 1 & Non-linear \\
+\(\text{Kuramoto}10\) & 1000 & 10 & 500 & 1 & Non-linear \\
+\hline
+\end{tabular}
+\label{tab:semi-synthetic-datasets}
+\end{table}
+
+\subsection{Synthetic} \label{subsec:data-training-synth}
+
+In addition to the proposed synthetic generation pipeline (Section \ref{sec:data-synthetic}), the synthetic data generator proposed by \citet{stein2024embracing} is also considered as an evaluation test set. Their formulation is based on what they refer to as a \textit{time-invariant SCM with additive noise} (independent Gaussian noise) terms and time-invariant functional mechanisms (thus enforcing causal stationarity), where functional relationships are determined by the lagged adjacency tensor \(\mathbb{A}\) and remain fixed across time. Their generation protocol begins by sampling a random lagged adjacency tensor \(\mathbb{A}\) of predefined dimensionality. It then randomly selects non-zero elements of \(\mathbb{A}\) to generate a single training example, based on a \textit{link threshold parameter} \(\rho \in (0,1)\), which determines the probability \(1 - \rho\) of including a causal edge in the adjacency tensor. A higher threshold would thus enforce sparser graphs. Each non-zero element is assigned a functional dependency \(f_{ij}^{\ell}\) drawn from a predefined collection of functional families, including the non-linear transformations shown in Table \ref{tab:stein-functions} while linear cases are created with a \textit{Vector Autoregressive Model (VAR)} form. From there, observational samples are generated.
+
+As mentioned in Section \ref{sec:data-challenge}, the authors attempt to guarantee stability of generated data samples by forcing boundness of the generated samples into a predefined interval. We found that the non-linear functions \(\text{clamp}_{-0.5,0.5}(x)\), \(x^2\) and \(\frac{1}{x}\) contribute negatively to the stability and computational efficiency of the generator and were thus not considered. To populate each non-zero entry, the authors sample unifomly from a pre-defined range of causal strength values, while various variances are selected for the independent noise terms. Min-max normalization is also applied just like in our generation mechanism.
+
+\begin{table}[ht!]
+\centering
+\caption{Function families used for nonlinear datasets, Linear cases are parameterized as VAR models, while the nonlinear set (NL) is drawn from a pool of transformations, with one sampled per edge.}
+\label{tab:stein-functions}
+\begin{tabular}{ll}
+\toprule
+\textbf{Family} & \textbf{Functional forms} \\
+\midrule
+Linear & $f(x) = a x + b$ \\
+Nonlinear (basic) & $e^x, \; \sin(x), \; \cos(x), \; |x|, \; x$ \\
+Nonlinear (bounded/activations) & $\sigma(x), \; \mathrm{ReLU}(x), \; \log(\sigma(x))$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%\begin{table}[ht!]
+%\centering
+%\caption{Synthetic datasets adapted from the \citet{stein2024embracing} generator to curate the \texttt{S\_Joint} collection. 
+%All datasets use additive Gaussian noise ($\sigma^2=0.5$), link threshold $\tau=0.85$, Min-max normalization, and are padded to 5 variables and $\ell_{\max}=3$. }
+%\label{tab:stein-datasets}
+%\begin{tabular}{llll}
+%\toprule
+%\textbf{Variables} & \textbf{Max lag} & \textbf{Function class} & \textbf{Coeff. range} \\
+%\midrule
+%3   & 1--3 & Linear (VAR)   & [0.3, 0.5] \\
+%3   & 1--3 & Non-linear (Table \ref{tab:stein-functions}) & [0.3, 0.5] \\
+%3   & 1--3 & Linear (VAR) & [0.3, 0.5] \\
+%5   & 1--3 & Non-linear (Table \ref{tab:stein-functions}) & [0.3, 0.5] \\
+%%7   & 1--3 & same as above & [0.3, 0.5] \\
+%%9   & 1--3 & same as above & [0.3, 0.5] \\
+%%10  & 1--3 & same as above & [0.3, 0.5] \\
+%%12  & 1--3 & same as above & [0.3, 0.5] \\
+%\bottomrule
+%\end{tabular}
+%\end{table}
+
+Using the above generator, we curated a set of dataset collections spanning \(3-5\) variables, with \(\ell_{\max}=3\) and both linear (L) and non-linear (NL) functional forms. These datasets are aggregated into the \texttt{S\_Joint} corpus, which includes \(82,000\) training, \(9,000\) validation, and \(9,000\) test samples. This collection serves as in-distribution, holdout datasets for ablation and generalization studies.
+
+Beyond these external generators, the \texttt{Synth\_230k} corpus is introduced using the synthetic generation pipeline from Section \ref{sec:data-synthetic}, which is used to train large-scale LCMs. The collection extends the diversity of created samples, supporting up to 12 variables and three lags, as well as and ensuring causal stationarity by construction, and consisting of an 80\% training, 10\% validation and 10\% test set as before. Importantly, it surpasses prior training set fforts by more than twofold in total instance count.
+
+\begin{table}[ht!]
+\centering
+\caption{Overview of synthetic time-series dataset collections used in this work. L denotes linear and NL non-linear. Sizes correspond to 80\% training, 10\% validation, and 10\% test splits.}
+\label{tab:synthetic-datasets}
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Collection} & \textbf{Size} & \textbf{Vars} & \textbf{Timesteps} & \textbf{Max Lag} & \textbf{Rels.} & \textbf{Obs./Interv.} \\
+\midrule
+\texttt{S\_joint} & 100k & 3--5 & 500 & 1--3 & L, NL & Observational \\
+\texttt{Synth\_230k} & 230k & 3--12 & 500 & 1--3 & L, NL & Observational \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsection{Simulated} \label{subsec:data-training-sim}
+
+For the selection of real-data to generate simulated samples, we adopt datasets well-used throughout the deep learning time-series forecasting literature \citep{hahn2023time}, from a variety of real-world domains. These include domains of power, weather, and transportation. The \textit{ETTh1} and \textit{ETTm1} data collections \citep{wu2021autoformer} record hourly and quarter-hourly measurements respectively of electricity transformers, as well as oil and load temperature in a two-year span between July 2016-2018. The \textit{WTH} dataset \citep{jiang2023fecam} consists of 35064 hourly atmospheric measurements, including temperature, humidity, wind speed, direction and pressure starting from January 1st 2010. The \textit{AirQualityUCI} corresponds to 12 hourly measurements of metal oxide chemical sensors in an Italian city. The \textit{bike-usage} dataset contains 52584 hourly wire and infrared sensor measurements of both bike and pedestrian data at the Burke-Gilman Trail in King County, Washington\footnote{Data is \href{https://data.seattle.gov/Transportation/Burke-Gilman-Trail-north-of-NE-70th-St-Bicycle-and/2z5v-ecg8}{publicly available} by the City of Seattle Open Data Portal (last accessed Oct 26, 2024).}, for a total of 5 time-series, while the \textit{Outdoors} dataset contains outdoor BME280 sensor measurements from Nanning, China between February 21st 2016 and November 25th 2016, for a total of 1440 time-steps. Lastly, we include the \textit{Air\_Quality} dataset, consisting of hourly data from 36 monitoring stations across China, as available in the work of \citet{cheng2024causaltime}. An overview is provided in Table \ref{tab:real-datasets}.
+
+\begin{table}[h!]
+\centering
+\caption{Overview of real time-series datasets used as inputs to the TCS algorithm for generating simulated data pairs.}
+\vspace{10pt}
+%\resizebox{0.55\textwidth}{!}{%
+\begin{tabular}{|c|c|c|c|c|c|}
+\hline
+\textbf{Dataset} & \textbf{Variables} & \textbf{Timesteps} & \textbf{Granularity} & \textbf{Start Date} & \textbf{Domain} \\ 
+\hline
+WTH & 12 & 35064 & 1 hour & 01/01/2020 & Weather \\ 
+ETTh1 & 7 & 17420 & 1 hour & 07/01/2016 & Power \\ 
+ETTm1 & 7 & 69680 & 15 min & 07/01/2016 & Power \\ 
+Air\_Quality & 36 & 8760 & 1 hour & - & Weather \\
+AirQualityUCI & 12 & 9357 & 1 hour & 03/10/2024 & Weather \\
+Bike-usage & 5 & 552584 & 1 hour & 01/01/2014 & Transportation \\
+Outdoors & 3 & 1440 & 1 sec & 21/02/2016 & Environmental \\
+\hline
+\end{tabular}
+%}
+\label{tab:real-datasets}
+\end{table}
+
+For any of these input time-series, we verify for stationarity using the \textit{Augmented Dickey-Fuller test} \citep{dickey1979distribution} (ADF), described in Algorithm \ref{alg:dickey-fuller}. In case non-stationarity is observed, it is normalized using finite differences up to second order. This step assures that data fed into training our LCMs do not possess extreme trends, possibly resulting in unstable training. We illustrate the pseudocode in Algorithm \ref{alg:dickey-fuller}. We follow the python implementation of \texttt{statsmodels} with maximum lag order \( 12 \cdot \left(\frac{T}{100}\right)^{1/4} \) where \(T\) is the number of observed timesteps.
+
+\begin{algorithm}[ht!]
+\caption{Dickey-Fuller Test (ADF)} \label{alg:dickey-fuller}
+\begin{algorithmic}[1]
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
+\REQUIRE Time-series data $\{y_t\}_{t=1}^{T}$, maximum lag order $p$
+\ENSURE Test statistic $\tau$, p-value, decision on unit root
+\STATE Compute first differences: $\Delta y_t \gets y_t - y_{t-1}$ for $t = 2, \dots, T$
+\STATE Construct regression design matrix with:
+    \begin{enumerate}
+        \item Regressor $y_{t-1}$
+        \item Deterministic terms (constant, trend) if included
+        \item Lagged differences $\Delta y_{t-k}$ for $k = 1, \dots, p$
+    \end{enumerate}
+\STATE Estimate regression by OLS:
+    \[
+    \Delta y_t = \alpha + \beta t + \gamma y_{t-1} + \sum_{k=1}^p \phi_k \Delta y_{t-k} + \epsilon_t
+    \]
+\STATE Extract test statistic $\tau \gets \hat{\gamma} / \mathrm{SE}(\hat{\gamma})$
+\STATE Compare $\tau$ against Dickey-Fuller critical values
+\IF{$\tau < \tau_{\text{critical}}$}
+    \STATE Reject null hypothesis (series is stationary)
+\ELSE
+    \STATE Fail to reject null hypothesis (series has a unit root)
+\ENDIF
+\RETURN Test statistic $\tau$, p-value, decision
+\end{algorithmic}
+\end{algorithm}
+
+Ultimately, we introduce a large-scale \textit{simulated} dataset collection, denoted \texttt{sim\_45K}. These datasets are derived from real multivariate time-series sources by simulating causal models nder the Adversarial Causal Tuning (ACT) framework (Subsection \ref{subsec:adversarial_causal_tuning}). Starting from well-established real-world datasets in the time-series forecasting literature \citep{lai2018modeling, wu2023timesnet}, we generate realistic causal variants using three main data augmentation techniques: (i) \textit{Time-window subsampling:} extracting multiple overlapping or disjoint temporal segments from long sequences to simulate diverse initial conditions and phase shifts; (ii) \textit{Node subset sampling:} selecting variable subsets to emulate local subsystem dynamics and improve structural diversity, and (iii) \textit{Estimator variability:} varying the causal estimation and simulation parameters within ACT to produce multiple realizations of plausible causal graphs from a single base dataset.
+
+This procedure yields over 45,000 high-quality simulated instances that preserve the statistical structure of real data while offering known causal ground truth. Together with the synthetic corpora (\texttt{synth\_230k}), these datasets form the combined large-scale training corpus \texttt{synth\_230k\_sim\_45k}, which is \textit{used for training large-scale LCMs}. The combined dataset totals \textit{more than 275,000 examples}, more than double the size of previous causal time-series foundations. Additionally, the \texttt{AirQualityMS} dataset is introduced as a realistic out-of-distribution benchmark, from which we create \(50\) simulated instances by ACT for further evaluating our trained models.
+
+In addition to purely synthetic and simulated collections, we curated a set of \textit{mixture datasets} designed to empirically investigate the optimal balance between synthetic and realistic (simulated) data during large-scale model training, in line with recent findings by \citet{das2024decoder} as elaborated in Section \ref{sec:data-challenge}. To this end, we curate four mixture datasets with varying ratios of synthetic to simulated data, based on the \texttt{synth\_230k\_sim\_45k} dataset, each consisting of \(50,000\) paired instances. All datasets preserve consistent temporal characteristics, with variable count in the range \([3,12]\), maximum lag \(\ell_{\max}=3\) and 500 time steps. Only data composition is altered. Each collection follows an 80\% / 10\% / 10\% split for training, validation, and test data as in the previous cases, as shown in Table \ref{tab:mixture-datasets}.
+
+\begin{table}[ht!]
+\centering
+\caption{Mixture dataset subsets curated to explore the effect of varying synthetic-to-simulated ratios on training dynamics and generalization. Each subset contains 50k data pairs.}
+\label{tab:mixture-datasets}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Collection} & \textbf{Size (pairs)} & \textbf{Synthetic (\%)} & \textbf{Simulated (\%)} \\
+\midrule
+\texttt{mix\_100s\_0sim} & 50k & 100 & 0 \\
+\texttt{mix\_80s\_20sim} & 50k & 80 & 20 \\
+\texttt{mix\_50s\_50sim} & 50k & 50 & 50 \\
+\texttt{mix\_20s\_80sim} & 50k & 20 & 80 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+These collections are introduced in Chapter \ref{chap:results} to explore the optimal combination of simulated and synthetic data instances for training large-scale LCMs and hether they benefit out-of-distribution performance compared to training on synthetic data alone.
+
+\begin{table}[ht!]
+\centering
+\caption{
+Overview of the large-scale synthetic and simulated dataset collections used for training, ablation, and evaluation of Large Causal Models (LCMs). Each dataset follows a 80\%/10\%/10\% split for training, validation, and test data. \texttt{Synthetic\_230k} forms the primary synthetic corpus; \texttt{Sim\_45K} comprises simulated (real-derived) data for realism evaluation; \texttt{Synth\_230k\_sim\_45k} is their combined mixture used for large-scale training and mixture analysis; and \texttt{S\_Joint} (adapted from \citet{stein2024embracing}) supports ablation studies under varying causal configurations.}
+\label{tab:final-train-collections}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Collection} & \textbf{Type} & \textbf{Instances} & \textbf{Vars} & \textbf{Lags} \\
+\midrule
+\texttt{Synthetic\_230k} & Synthetic (Section \ref{sec:data-synthetic}) & 230k & 3--12 & 1--3 \\
+\texttt{Sim\_45K} & Simulated (Section \ref{sec:data-simulated})& 45k & 3--12 & 1--3 \\
+\texttt{Synth\_230k\_sim\_45k} & Mixture & 275k & 3--12 & 1--3 \\
+\texttt{S\_Joint} & Synthetic (\citet{stein2024embracing}) & 100k & 3--5 & 1--3 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Finally, we also introduce a synthetic corpus combining observational and interventional samples, \texttt{Synth\_40k}, which is introduced for preliminary experiments in Chapter \ref{chap:results} to explore the effect of interventions on the performance of LCMs. As the name suggests, it consists of forty thousand synthetic instances, of the same splits as the previous collections, up to \(5\) variables and \(\ell_{\max}=3\). Each instance consists not only of the ground truth lagged causal graph and the observed time series, but also of the intervened samples, created as in Section \ref{sec:data-interventions}.
+
+
+\subsection{Data Shardification} \label{subsec:shardification}
+
+Given the large scale of the combined dataset (totaling more than 275,000 paired instances), it becomes impractical to load the entire collection into memory simultaneously during training. To address this limitation, we adopt a \textit{shardification} approach, in which the dataset is partitioned into multiple serialized files (\texttt{.pt} shards), each containing a manageable subset of samples. This design allows efficient storage, distribution, and access to data instances without compromising training throughput.
+
+To support seamless access across all shards, a custom data loader is introduced, treating the collection of sharded files as a single, unified dataset. During training, shards are loaded on demand (only the file corresponding to the currently accessed index range is read into memory, while previous shards are released). This loading mechanism substantially reduces memory footprint and enables training on systems with limited resources, while maintaining constant-time indexing behavior for random sample retrieval.
+
+Each shard is dynamically wrapped by the main data loader, which applies standardized preprocessing steps such as normalization, temporal alignment, and fixed-length padding or truncation to \(L_{\max}\). To prevent data leakage across shards, all samples are deeply cloned before returning, guaranteeing memory isolation and reproducible sampling.
+
+At the beginning of each training epoch, the shard order is randomized to promote data diversity and prevent potential overfitting to shard-specific distributions. The result is an efficient, scalable data pipeline that allows LCMs to be trained over hundreds of thousands of simulated and synthetic causal time-series pairs without exceeding hardware memory limits.

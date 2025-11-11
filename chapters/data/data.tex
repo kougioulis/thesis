@@ -1,0 +1,49 @@
+\chapter{Data Generation} \label{chap:data}
+
+\begin{chapquote}{\textit{Abraham Lincoln}}
+``If I had six hours to chop down a tree, I'd spend the first four sharpening the axe.''
+\end{chapquote}
+
+A central limitation of current causal discovery methods, either in the temporal or i.i.d. setting, is the exclusive reliance on synthetic datasets for their evaluation, benchmarking and recently, for foundational-inspired methods (Section \ref{sec:related-work}), training. This chapter outlines our methodologies for generating vast data instances\footnote{We refer to a pair of a multivariate time-series and its corresponding causal graph as a \textit{data instance} or simply dataset, when no ambiguity exists regarding the form of data. Multiple pairs of data instances are referred to as a \textit{data collection.}} to support robust training of our large causal models. Synthetic data generation pipelines are typically constructed using predefined causal structures and known functional dependencies from randomly generated SCMs. While such approaches offer precise control and clarity over the data generation process, they often fail to capture the complexity and statistical idiosyncrasies of real-world time-series. To address this, we propose generation methods of both \textit{synthetic} and \textit{simulated} (realistically generated) data. Briefly, we opt for training on a mixture of both synthetic and simulated datasets. 
+
+We begin with an introduction to the context of data generation (Section \ref{sec:data-introduction}) and proceed by outlining the main challenges for causal discovery (Section \ref{sec:data-challenge}). The remainder is structured as follows: Section \ref{sec:data-synthetic} outlines the generation process of synthetic data pairs, which serve as a learning foundation for our Large Causal Models. Section \ref{sec:data-simulated} introduces the \textit{Temporal Causal-based Simulation (TCS)} framework, a modular and model-agnostic generative method for causal models and corresponding time-series samples, as well as the \textit{Adversarial Causal Tuning (ACT)} module, which enables fine-tuning of TCS based on a Min-max optimization approach. Unlike traditional synthetic data generators in literature, our methodology learns the structural and functional dependencies, as well as the noise distribution, directly from time-series samples, and by allowing fine-tuning of the process further enhances the realism of generated causal models and bridges the domain gap between synthetic training and applicability to real-world scenarios. This part serves as a crucial component for enhancing the generalization performance of our LCMs, allowing us to leverage data of higher quality for not only training, but also evaluation and benchmarking. Section \ref{sec:data-training} covers the curation of training and validation pairs used for model training, as well as the construction of our benchmark datasets. Finally, Section \ref{subsec:shardification} provides an overview of our approach for partitioning data into shards for efficient training of LCMs.
+
+\input{chapters/data/introduction}
+
+\input{chapters/data/challenge}
+
+\input{chapters/data/synthetic}
+
+\input{chapters/data/simulated}
+
+\input{chapters/data/interv}
+
+\input{chapters/data/training}
+
+%\section{Generating Permuted Data Pairs} \label{sec:data-augmentation}
+%
+%\begin{algorithm}[ht!]
+%\caption{Permutation-based Data Augmentation}
+%\label{alg:permuted-pairs}
+%\begin{algorithmic}[1]
+%\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+%\renewcommand{\algorithmicensure}{\textbf{Output:}}
+%\REQUIRE Dataset $\mathcal{D} = \{(X_i, G_i)\}_{i=1}^N$ of time-series $X_i$ and ground-truth graphs $G_i$, Number of permutations per pair $\sigma$
+%\ENSURE Augmented dataset $\mathcal{D}_\text{augmented}$
+%\STATE Initialize $\mathcal{D}_\text{augmented} \gets \emptyset$
+%\FOR{each $(X_i, G_i) \in \mathcal{D}$}
+%    \STATE Add $(X_i, G_i)$ to $\mathcal{D}_\text{augmented}$
+%    \FOR{$j = 1 \to \sigma$}
+%        \STATE Sample a random permutation $\pi$ over the $d$ variables of $X_i$
+%        \STATE Apply $\pi$ to time-series: $X_i' \gets \pi(X_i)$
+%        \STATE Apply $\pi$ to causal graph: $G_i' \gets \pi(G_i)$
+%        \STATE Add $(X_i', G_i')$ to $\mathcal{D}_\text{augmented}$
+%    \ENDFOR
+%\ENDFOR
+%\RETURN $\mathcal{D}_\text{augmented}$
+%\end{algorithmic}
+%\end{algorithm}
+%
+%An observed drawback of the work by \cite{stein2024embracing} is that predictions are not \textit{permutation invariant} with respect to input. Consider an (observational) input of the time-series \(X,Y,Z\) where \(X\) causes \(Y\) with lag \(1\). If the time-series input is permuted column-wise (i.e. only the ordering of the variables changes), the model may infer a different causal graph. 
+%
+%To address this and as a step towards permutation-invariant predictions of our LCMs, we augment the training data by generating \(\sigma\) permuted datasets for each pair of time-series and their ground truth causal graph. We permute (i) the observational time-series samples and (ii) the corresponding ground truth lagged adjacency tensor accordingly. As for \(d\) variables there exist \(d!\) possible permutations, we fix \(\sigma=3\) which both approximates invariance and results in a much larger training and testing corpus. Pseudocode for this augmentation step is provided in Algorithm \ref{alg:permuted-pairs}. Without loss of generality, only observational data are assumed in the pseudocode.  
