@@ -1,22 +1,3 @@
-%\section{Main Contributions} \label{sec:contributions}
-%
-%We now provide an overview of our key contributions. These are threefold: the development of a synthetic data generation pipeline for observational\footnote{Also able to generate interventional data, if needed.} data along with their corresponding causal graphs, the Temporal Causal-based Simulation (TCS) framework for generating realistic pairs of causal graphs and time-series samples, and ultimately the design and implementation of our Large Causal Models (LCMs) trained on the data described previously.
-%
-%\subsubsection{Pipeline for Generating Synthetic Data Pairs}
-%
-%We design and implement a \textit{pipeline for generating random temporal Structural Causal Models (SCMs) and their corresponding time-series data}. Unlike prior approaches, our pipeline allows generation of larger number of variables, a richer collection of functional dependencies and accounting for sparser edge densities in the causal graph\footnote{Edge density is defined as the ratio of the number of edges to the total number of possible edges. Causal graphs are in general, sparse.}, among others. This contribution constitutes the first step towards curating the training data for the causal discovery task of our LCMs, which is detailed in Chapter \ref{chap:data} and Section \ref{sec:data-synthetic}
-%
-%\subsubsection{Temporal Causal-based Simulation (TCS)}
-%
-%Building on the synthetic SCM pipeline, we propose the \textit{Temporal Causal-based Simulation (TCS)} framework for generating realistic pairs of temporal causal graphs and time-series samples. In a nutshell, TCS generates realistic pairs of time-lagged causal graphs and associated time-series samples through a three-phase process: causal graph discovery, functional dependency estimation and noise modeling. Given an observational time-series input from real data, TCS outputs pairs that better reflect the complexity of real-world temporal systems than purely synthetic ones, based on a novel \textit{AutoML} \citep{hutter2019automated} Min-max optimization scheme (\textit{Adversarial Causal Tuning - ACT}) that selects the optimal simulation configuration using \textit{Classifier 2-Sample Tests (C2STs)}. This contribution is presented in detail in Section \ref{sec:data-simulated}.
-%
-%\subsubsection{Large Causal Models (LCMs)}
-%
-%Finally, we present \textit{Large Causal Model (LCMs)}, a scalable, pre-trained foundation model approach for temporal causal discovery. Our LCMs introduce several innovations: (i) extended input dimensionality, expanding up to 12 variables and 3 lags (compared to the previous SOTA's 5 variables and limited scalability) based on an Informer \citep{zhou2021informer} architecture and (ii) robust training on a mixture of synthetic and realistically generated data, inspired by findings from \citet{das2024decoder} that such diversity improves generalization and (iii) evaluation on a diverse mixture of synthetic and real-world collections. To the best of our knowledge, this is the first foundation-style model of its kind, trained on a mixture of synthetic and realistically generated data and evaluated in a thorough manner, showcasing robust in-distribution and zero shot out-of-distribution performance.
-%
-%We also present initial experimental results on extending causal foundation models to leverage interventional data and integrate prior knowledge during both training and causal discovery process, highlighting promising directions for future research.
-%
-
 \section{Guide to this Thesis}
 
 \begin{figure}[h!]
