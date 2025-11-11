@@ -1,0 +1,528 @@
+\chapter{Training} \label{chap:training}
+
+\begin{chapquote}{\textit{John Tukey}}
+``Far better an approximate answer to the right question, which is often vague, than an exact answer to the wrong question, which can always be made precise.''
+\end{chapquote}
+
+This chapter provides a detailed treatment of the training process of our LCMs. It serves as an extension of our high-level discussion in Section \ref{sec:dl}, but tailored specifically towards the training of our LCMs. We begin by outlining the basic components of our training process and the associated challenges, before moving on to the main objectives of our work.
+
+\section{Optimization Strategies \& Optimizers} \label{sec:optimizer}
+
+As briefly mentioned in Section \ref{sec:dl}, a neural network model attempts to solve an optimization problem. Broadly speaking, this concerns finding the best possible values of its trainable parameters, over all feasible ones. The optimization problem is typically formulated as a \textit{minimization problem}, where the goal is to find the set of parameters that minimizes a loss function. For a regression task, this means minimizing the expectation of the loss function over the parameters \(\theta\) of a trainable neural model \(f_\theta\), where the expectation is taken with respect to the underlying joint distribution \(p_{X,Y}\) that our input-output training data is assumed to follow. Mathematically, this corresponds to
+
+\begin{equation}
+\theta^{*} = \text{argmin}_{\theta \in \Theta} \mathbb{E}_{(X,Y) \sim p_{X,Y}} \left[\mathcal{L}(f(x;\theta), Y)\right]
+\end{equation}
+ 
+where \(x\) is the input (in our case, the time-series samples) and \(y\) the corresponding label (the ground truth lagged adjacency tensor from the ground truth TSCM), \(\Theta\) the parameter space, \(\theta\) the optimal parameter set and \(\mathcal{L}\) the loss function. Once the expectation is computed, all variables become fixed except for the parameters \(\theta\) of the model. In this sense, only those are left to determine the functions value, which corresponds to the minimization of our quantity of interest. As may be already evident, this problem is \textit{intractable} and is solved by an algorithm that dictates how and when the parameters \(\theta\) are updated over time during training, such that convergence as close as possible to the true minimum is achieved. This role is assigned to the \textit{optimizer} that is used, which is a rigid part of the training protocol.
+
+There are many optimizers to choose from depending on the implemented architecture and nature of the problem. It may even be the case that only one carefully tuned optimizer can adequately train the weights of a specific network. Nonetheless, some optimizers have proven to work well in most circumstances. A treatment of the most common ones is provided in Appendix \ref{app:optimizers}.
+
+\begin{algorithm}[t]
+\caption{AdamW Optimizer} \label{alg:adamw}
+\begin{algorithmic}[1]
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
+\REQUIRE Parameters $\theta$, learning rate $\eta$, $\beta_1, \beta_2 \in [0,1)$, weight decay $\lambda$, $\epsilon > 0$
+\ENSURE Updated parameters $\theta$
+\STATE Initialize $m_0 \gets 0$, $v_0 \gets 0$, $t \gets 0$
+\FOR{each iteration}
+    \STATE $t \gets t+1$
+    \STATE Sample mini-batch and compute gradient $g_t \gets \nabla_\theta \mathcal{L}(\theta)$
+    \STATE $m_t \gets \beta_1 m_{t-1} + (1 - \beta_1) g_t$
+    \STATE $v_t \gets \beta_2 v_{t-1} + (1 - \beta_2) g_t^2$
+    \STATE $\hat{m}_t \gets \frac{m_t}{1 - \beta_1^t}$
+    \STATE $\hat{v}_t \gets \frac{v_t}{1 - \beta_2^t}$
+    \STATE $\theta \gets \theta - \eta \cdot \left(\frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon} + \lambda \theta\right)$
+\ENDFOR
+\end{algorithmic}
+\end{algorithm}
+
+For training our LCMs, we use the Adam optimizer \citep{loshchilov2017fixing} which serves as a popular extension of Adam \citep{kingma2015adam}. AdamW was introduced to fix a subtle but important flaw in Adam regarding weight decay (commonly used for regularization). In classical Adam, weight decay is typically implemented by adding an \(L_2\) penalty term to the loss function. However, this approach causes the penalty to interact with Adam's adaptive learning rate mechanism in unintuitive ways: instead of applying a simple shrinkage to the parameters, the effective weight decay is scaled differently for each parameter depending on its learning rate. This leads to inconsistent and sometimes poor generalization performance. AdamW resolves this by decoupling weight decay from the gradient update rule. In practice, this means that the weight decay term is applied directly to the parameter update rule (line 9 in Algorithm \ref{alg:adamw}), independently of the adaptive gradient correction. The effect is a more consistent and theoretically justified form of regularization. Empirically, AdamW has been shown to improve generalization, especially in large-scale deep learning models such as Transformers and convolutional networks, and it is now the optimizer of choice in many modern architectures, such as in BERT \citep{devlin2019bert}. 
+
+\section{Loss Functions} \label{sec:loss-functions}
+
+Since a neural network must learn the mapping from inputs to desired outputs, a fundamental requirement is a mechanism to quantify how “close” or “far” the network's predictions are from the ground truth. The loss function serves precisely this role—its magnitude measures the discrepancy between the model's estimates and the target causal structure. The optimization objective is therefore to minimize this loss across all training examples.
+
+\subsection{Binary Cross-Entropy Loss} \label{subsec:bce}
+
+For our LCMs, each possible directed edge \(V^i_{t-\ell} \rightarrow V^j_t\) in the lagged causal graph corresponds to a Bernoulli random variable encoding the presence or absence of a direct causal relationship. As elaborated in Section \ref{sec:problem-formulation}, predicting causal edges naturally takes the form of a binary classification task, where the model outputs a confidence score \(\hat{\mathbb{A}}_{ji\ell} \in [0,1]\) representing the estimated probability that a direct lagged edge \(V^i_{t-\ell} \rightarrow V^j_t\) exists.
+
+Let \(a_i \in {0,1}\) denote the ground-truth label for the \(i\)-th edge and \(\hat{a}_i \in [0,1]\) the model's predicted probability. The likelihood of the observed labels given the predictions can be modeled as a product of independent Bernoulli variables:
+
+\begin{equation}
+p(\mathbf{a} \mid \mathbf{\hat{a}}) = \prod_{i=1}^{N} \hat{a}_i^{a_i} (1 - \hat{a}_i)^{1 - a_i}
+\end{equation}
+
+where \(N = V_{\max}^2 \times \ell_{\max}\) is the total number of potential lagged edges. Maximizing this likelihood is equivalent to minimizing the \textit{negative log-likelihood (NLL)}:
+
+\begin{equation}
+\mathcal{L}_{\text{BCE}}(\mathbf{a}, \mathbf{\hat{a}})
+= -\frac{1}{N} \sum_{i=1}^{N} \left[ a_i \log(\hat{a}_i) + (1 - a_i) \log(1 - \hat{a}_i) \right]
+\label{eq:bce-basic}
+\end{equation}
+
+This defines the \textit{Binary Cross-Entropy (BCE)} loss, a standard choice for supervised binary prediction tasks. It penalizes incorrect predictions more heavily when the model is confident but wrong, owing to the logarithmic growth of the loss as \(\hat{a}_i \to 0\) for positive labels (\(a_i = 1\)) or \(\hat{a}_i \to 1\) for negative labels (\(a_i = 0\)).
+
+The model produces logits \(z_i \in \mathbb{R}\), which are converted to probabilities via the sigmoid function \(\hat{a}_i = \sigma(z_i) = (1 + e^{-z_i})^{-1}\). Substituting this into Equation \ref{eq:bce-basic} yields the BCE loss in terms of logits:
+
+\begin{equation}
+\mathcal{L}_{\text{BCEWithLogits}}(\mathbf{a}, \mathbf{z})
+= -\frac{1}{N} \sum_{i=1}^{N} \left[a_i \log \sigma(z_i) + (1 - a_i) \log (1 - \sigma(z_i))\right]
+\label{eq:bce-logits}
+\end{equation}
+
+For numerical stability, training employs the fused \texttt{BCEWithLogitsLoss} formulation, which combines the sigmoid activation and BCE computation into a single operation to prevent overflow and ensure stable gradients. Differentiating with respect to \(z_i\) gives:
+
+\begin{equation}
+\frac{\partial \mathcal{L}_{\text{BCE}}}{\partial z_i} = \sigma(z_i) - a_i = \hat{a}_i - a_i
+\end{equation}
+
+showing that the gradient corresponds directly to the difference between predicted and true probabilities. Denoting \(\hat{\mathbb{A}}\) and \(\mathbb{A}\) as the predicted and true lagged adjacency tensors, respectively, the BCE loss over a mini-batch is computed as:
+
+\begin{equation}
+\mathcal{L}_{\text{BCE}}(\mathbb{A}, \hat{\mathbb{A}}) = -\frac{1}{V^2_{\max} \cdot \ell_{\max}}
+\sum_{i,j=1}^{V_{\max}} \sum_{\ell=1}^{\ell_{\max}}
+\left[
+A_{ij}^{(\ell)} \log \hat{\mathbb{A}}_{ji \ell} + (1 - \mathbb{A}_{ji\ell}) \log (1-\hat{\mathbb{A}}_{ji\ell})
+\right]
+\label{eq:bce-lcm}
+\end{equation}
+
+\subsection{Correlation Regularization} \label{subsec:cr}
+
+In addition to the primary BCE loss, we introduce a correlation-based regularization term designed to guide the model toward statistically plausible edge predictions. The intuition is to incorporate observable signal-level dependencies as auxiliary information, a form of \textit{training aid}, to encourage the model to assign high causal confidence only where empirical evidence supports it.
+
+This \textit{Correlation Regularization} (CR) term penalizes predicted edges between variable pairs whose empirical lagged cross-correlation is low. Following the formulation introduced by \citet{stein2024embracing}, we define:
+
+\begin{equation}
+\mathcal{L}_{\text{CR}}(\hat{\mathbb{A}}, X) = \sum_{i,j=1}^{V_{\max}} \sum_{\ell=1}^{\ell_{\max}}
+\frac{\hat{\mathbb{A}}_{ji\ell}}{\left(|\mathrm{CC}(X_j, X_i, \ell)| + \epsilon\right)^{3/2}}
+\end{equation}
+
+where \(\mathrm{CC}(X_j, X_i, \ell)\) denotes the empirical lagged cross-correlation between variables \(X_j\) and \(X_i\) at lag \(\ell\), computed over the observed time-series segment, and \(\epsilon = 10^{-6}\) ensures numerical stability. The exponent \(3/2\) accentuates the penalty for near-zero correlations while preserving smooth gradients for moderately correlated pairs. In implementation, both the ground truth \(\mathbb{A}\) and the predicted tensor \(\hat{\mathbb{A}}\) are flattened to one-dimensional tensors of length \(V_{\max}^2 \times \ell_{\max}\) before computing the BCE loss. The total loss used for training LCMs thus becomes:
+
+\begin{equation}
+\mathcal{L} = \mathcal{L}_{\text{BCE}} + \lambda_{\text{CR}} \cdot \mathcal{L}_{\text{CR}},
+\end{equation}
+
+where \(\lambda_{\text{CR}}\) is a tunable hyperparameter controlling the strength of the correlation-based penalty. In practice, this term discourages spurious edge predictions and promotes generalization by anchoring causal inference to observable statistical structure. Extensive ablation experiments are performed in Chapter \ref{chap:results} to quantify its effect on model stability and performance.
+
+
+\section{Training Protocol and Data Splits} \label{sec:training-prot}
+
+All models are trained on the curated datasets described in Chapter \ref{chap:data}. Each dataset follows an 80/10/10\% split into training, validation, and test subsets to ensure a fair evaluation and prevent data leakage. Mini-batches are randomly sampled from the training set and optimization is performed using the AdamW optimizer (Section \ref{sec:optimizer}) with default parameters \(\beta_1 = 0.9\), \(\beta_2 = 0.999\) for a maximum of \(100\) epochs.
+
+
+\section{Training Challenges \& Practical Remedies}
+
+This section covers techniques in the optimizer and training protocol that help overcome challenges encountered when training not only our LCMs but deep neural architectures in general. As models become larger and datasets more complex, effective training is impeded by issues such as limited computational resources, data quality and quantity constraints, optimization difficulties like vanishing gradients, training instability, and overfitting. Remedies including advanced optimizer designs, learning rate scheduling, gradient accumulation, regularization, and adaptive training strategies enable more efficient and stable learning. By understanding and addressing these challenges with appropriate methods, it becomes possible to train larger, more accurate models that generalize well to unseen data.
+
+
+\subsection{Gradient Accumulation}
+
+\begin{figure}[t!]
+    \centering
+\begin{tikzpicture}[
+  node distance=6mm and 6mm, 
+  >=Stealth, 
+  every node/.style={font=\sffamily\small}, 
+  box/.style={draw,rounded corners,inner sep=3pt,minimum width=22mm,align=center},
+  fwd/.style={box,fill=blue!8},
+  bwd/.style={box,fill=orange!8},
+  acc/.style={box,fill=green!8},
+  opt/.style={box,fill=purple!8}
+]
+
+% Microbatches
+\node[fwd] (F1) {Microbatch 1\\Forward pass\\(loss $L_1$)};
+\node[bwd, right=of F1] (B1) {Backward\\(grad $g_1$)};
+\draw[->] (F1) -- (B1);
+
+\node[fwd, below=of F1] (F2) {Microbatch 2\\Forward pass\\(loss $L_2$)};
+\node[bwd, right=of F2] (B2) {Backward\\(grad $g_2$)};
+\draw[->] (F2) -- (B2);
+
+\node[fwd, below=of F2] (F3) {Microbatch 3\\Forward pass\\(loss $L_3$)};
+\node[bwd, right=of F3] (B3) {Backward\\(grad $g_3$)};
+\draw[->] (F3) -- (B3);
+
+\node[fwd, below=of F3] (F4) {Microbatch 4\\Forward pass\\(loss $L_4$)};
+\node[bwd, right=of F4] (B4) {Backward\\(grad $g_4$)};
+\draw[->] (F4) -- (B4);
+
+% Grad ccumulator box
+\node[acc, right=8mm of B2, minimum width=28mm] (ACC) {\(\nabla\) Accumulator\\$G \gets G + g_i$};
+
+\foreach \X in {B1,B2,B3,B4} {
+  \draw[->] (\X.east) -- ++(2mm,0) |- (ACC.west);
+}
+
+% Optimizer box 
+\node[opt, right=8mm of ACC, minimum width=28mm] (OPT) {Optimizer step\\$\theta \gets \theta - \eta \cdot \tfrac{1}{k} G$};
+\draw[->] (ACC.east) -- (OPT.west);
+
+% Reset arrow
+\draw[->, dashed, thick] (OPT.east) -- ++(5mm,0) |- (ACC.south)
+  %node[pos=0.35,right,align=left] {\small reset $G \leftarrow 0$};
+  node[pos=0.85,below,align=center] {reset $G \leftarrow 0$};
+
+% Header
+\node[above=2mm of F1, font=\sffamily\bfseries] {Gradient Accumulation ($k=4$)};
+
+% Brace
+\draw[decorate,decoration={brace,amplitude=5pt}] 
+  ($(F1.north west)+(-3mm,3mm)$) -- ($(F4.south west)+(-3mm,-3mm)$) 
+  node[midway,left=2mm,align=center] {Microbatches\\$(1,\ldots,k)$};
+
+\end{tikzpicture}
+\caption{Illustration of the gradient accumulation method \citep{huang2019gpipe}. Instead of performing a parameter update after a single batch, gradients from multiple forward and backward passes of smaller batches (microbatches) are sequentially accumulated in a dedicated buffer (the \textit{gradient accumulator}). After \(k\) microbatches, the aggregated gradient (summed or averaged) is applied in a single optimizer step to update the model parameters, followed by a reset of the accumulator. This approach allows training with effectively larger batch sizes while reducing memory usage, since only one microbatch needs to reside in memory at a time.}
+\label{fig:grad-accumulation}
+\end{figure}
+
+As deep neural networks become larger on the number of parameters, an important issue is training under memory constraints. For the most part, training deep neural architectures require large amounts of memory resources for storing model parameters and their gradients, even for just fine-tuning of pre-trained large scale models. A significant question is thus how to allow efficient training when memory resources are limited. In literature, primarily two memory reduction methods have been introduced to tackle the aforementioned problem: \textit{gradient accumulation} \citep{huang2019gpipe} and \textit{gradient release} \citep{pudipeddi2020training}.
+
+Gradient accumulation allows us to simulate training with a larger \textit{effective batch size} by reducing the activation memory. As illustrated in Figure \ref{fig:grad-accumulation}, instead of updating parameters after every mini-batch, we compute gradients for several small mini-batches (\textit{microbatches}), accumulate them in memory and only apply the optimizer update once after \(k\) steps (selecting \(k=4\) for large models). This means the effective batch size = (mini-batch size) \(\times\) (accumulation steps). Gradient accumulation allows training of large-scale LCMs by simulating larger batch sizes when memory limitations prevent larger batch sizes. This is crucial since each batch may consist of hundreds of multivariate time-series samples with long temporal horizons. By accumulating gradients over \(k=4\) steps before applying an update, we approximate the stability of training with a larger batch (known as the \textit{effective batch size}). Algorithm \ref{alg:grad-accumulation} describes the gradient accumulation method.
+
+This approach has been experimentally shown to have no negative impact on training and convergence, although a small trade-off exists: In a sense, small batches can be noisy and thus lead to some training instability, or have a regularizing effect and lead to a better global minimum, while larger batches can be more stable but generalize less well.
+
+In all training experiments, we utilize an \textit{effective batch size of \(B=64\)}. We thus select \(k=4\) when gradient accumulation is used for large-scale models (\( > 10M\) parameters) to simulate an effective batch size of \(B\).  
+
+\begin{algorithm}[ht!]
+\caption{Gradient Accumulation} \label{alg:grad-accumulation}
+\begin{algorithmic}[1]
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
+\REQUIRE Accumulation steps $k$, optimizer, model $f_\theta$, dataset $\mathcal{D}$
+\ENSURE Updated parameters $\theta$
+\STATE $step \gets 0$
+\FOR{each epoch}
+    \FOR{microbatch $B \subseteq \mathcal{D}$}
+        \STATE Compute loss $L_B \gets \mathcal{L}(f_\theta(B))$
+        \STATE Compute gradients $g_B \gets \nabla_\theta L_B$
+        \STATE Accumulate gradients: $G \gets G + g_B$
+        \STATE $step \gets step + 1$
+        \IF{$step \bmod k = 0$}
+            \STATE Update parameters: $\theta \gets \theta - \eta \cdot G$
+            \STATE Reset accumulator $G \gets 0$
+        \ENDIF
+    \ENDFOR
+\ENDFOR
+\end{algorithmic}
+\end{algorithm}
+
+
+\subsection{Early Stopping}
+
+Early stopping (Algorithm \ref{alg:early-stopping}) is a fundamental regularization technique when training of machine learning models. The main objective is to prevent overfitting (i.e. the model learns the training data's noise and idiosyncrasies rather than its underlying patterns) by monitoring the validation loss over epochs. The algorithm uses two key hyperparameters to achieve this goal: (i) the \textit{minimum improvement threshold} \(\delta\), which is a small margin designed to prevent the algorithm from terminating prematurely due to minor, non-significant fluctuations in the validation loss and (ii) the \textit{patience term} \(\rho\) which specifies the number of epochs to wait for a significant improvement in the validation loss before stopping. We adopt a patience value of \(\rho=20\) to accommodate the often slow and fluctuating convergence patterns observed in the training of deep neural networks, allowing the model to adapt through periods of stagnated improvement without premature termination.
+
+\begin{algorithm}[t!]
+\caption{Early Stopping for LCM Training} \label{alg:early-stopping}
+\begin{algorithmic}[1]
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
+\REQUIRE Validation loss sequence $\{val\_loss^{(e)}\}$, patience $p$, minimum improvement $\delta$
+\ENSURE Best epoch $e^*$ or stop signal
+
+\STATE $best\_val\_loss \gets \infty$
+\STATE $counter \gets 0$
+\FOR{epoch $e = 1, 2, \dots$}
+    \STATE Compute $val\_loss^{(e)}$
+    \IF{$val\_loss^{(e)} < best\_val\_loss - \delta$}
+        \STATE $best\_val\_loss \gets val\_loss^{(e)}$
+        \STATE $e^* \gets e$
+        \STATE $counter \gets 0$
+    \ELSE
+        \STATE $counter \gets counter + 1$
+    \ENDIF
+    \IF{$counter \geq p$}
+        \STATE \textbf{stop training} and return $e^*$
+    \ENDIF
+\ENDFOR
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Learning Rate Scheduler}
+
+\begin{algorithm}[h]
+\caption{Learning Rate Scheduler for LCM Training} \label{alg:scheduler}
+\begin{algorithmic}[1]
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
+\REQUIRE Initial learning rate $\eta$, reduction factor $\gamma < 1$, patience $p_{lr}$, min\_lr
+\ENSURE Adaptively updated $\eta$
+\STATE $best\_val\_loss \gets \infty$
+\STATE $counter \gets 0$
+\FOR{epoch $e = 1, 2, \dots$}
+    \STATE Compute $val\_loss^{(e)}$
+    \IF{$val\_loss^{(e)} < best\_val\_loss$}
+        \STATE $best\_val\_loss \gets val\_loss^{(e)}$
+        \STATE $counter \gets 0$
+    \ELSE
+        \STATE $counter \gets counter + 1$
+    \ENDIF
+    \IF{$counter \geq p_{lr}$}
+        \STATE $\eta \gets \max(\gamma \cdot \eta, min\_lr)$
+        \STATE $counter \gets 0$
+    \ENDIF
+\ENDFOR
+\end{algorithmic}
+\end{algorithm}
+
+A constant learning rate (independent of the epoch) can hinder effective training, as it can fail to adapt to the nature of the optimization landscape. In the initial stages of training, a high learning rate enables rapid traversal towards minima of the loss. However, as training progresses and the model approaches a local or global minimum, a large learning rate can lead to \textit{overshooting} and instability, leading to oscillatory behavior or even divergence.
+
+A learning rate scheduler (Algorithm \ref{alg:scheduler}) approach effectively addresses this problem by dynamically adjusting the learning rate \(\eta\) during training. The scheduler works by monitoring the validation loss and reducing the learning rate when there is no significant improvement for a specified number of epochs, known as \textit{learning rate patience} \(p_\text{lr}\). By decreasing the learning rate by a \textit{reduction factor} \(\gamma\), the optimizer takes smaller, more conservative steps, allowing for stable convergence towards the optimal causal structure. This prevents "over-updates" that could destabilize the discovery process and ensures the model can effectively fine-tune its parameters. This approach aligns with well-established adaptive learning rate strategies in deep learning. \citet{smith2017cyclical} introduced cyclic and adaptive learning rate methods that help efficiently explore the loss landscape and lead to better convergence. Early work by \citet{sutskever2013importance} also emphasized the importance of careful learning rate scheduling for stable optimization in deep networks.
+
+In all our experiments, we apply a reduction factor \(\gamma = 0.1\) after 10 epochs without improvement of the validation loss.
+
+\section{Training for Prior Knowledge} \label{sec:training-prior}
+
+In many real-world domains, partial knowledge of causal relationships is often available or can be constructed manually by experts. This information can come in the form of known causal edges or paths (i.e. (“\(A\) causes \(B\)”)) or exclusions (“\(A\) does not cause \(B\)”), and may include varying degrees of confidence. Incorporating such domain knowledge into a neural causal discovery model can improve interpretability and robustness, especially under limited data or noisy observational settings. However, unlike constraint-based algorithms such as PCMCI \citep{runge2018causal} which can directly encode hard constraints, neural architectures exhibit intrinsic stochasticity and non-linearity that make strict enforcement of such constraints impractical. 
+
+To address this challenge, we introduce a \textit{soft prior-knowledge regularization} mechanism that complements the supervised edge classification task with an auxiliary stochastic objective. The objective is to gently bias the learning process toward plausible causal structures without rigidly constraining the optimization trajectory. Prior knowledge is injected both at the input level and in the loss function, allowing the model to be gently guided toward known or plausible causal structures without rigidly constraining learning.
+
+\subsection{Random Prior Knowledge Sampling}
+
+Prior knowledge is expressed either as edges (corresponding to paths of length one) or as paths of length \(L \leq \ell_{max}\) in the lagged causal graph \(\mathbb{A} \in \left\{0,1\right\}^{V_{\max} \times V_{\max} \times \ell_{\max}}\) as elaborated in Subsection \ref{subsec:scope-prior}. The ground-truth lagged adjacency tensor is first binarized, such that \(\mathbb{A}_{ji\ell} = 1 \) if a causal edge \(X^i_{t-\ell} \rightarrow X^j_t\) exists, i.e. \(\mathbb{A}_{ji\ell} > 0\) and zero otherwise. From this binary tensor, all directed paths of length up to \(\ell_{\max}\) are extracted via a \textit{depth-first search (DFS)} procedure, implemented in the \textsc{FINDPATHS} algorithm (Algorithm \ref{alg:find-paths}). Essentially, this unrolls the time-lagged causal graph forward in time, enumerating all (acyclic) causal paths of the form \(\pi = \left\{ (u_t,u_{t+1}, \ell_t)\right\}^m_{t=1}, ~m \leq \ell_{\max}\) so that
+
+\begin{equation}
+    \prod_{t=1}^{m} \mathbf{1}[\mathbb{A}_{u_{t+1}, u_t, \ell_t} > 0] > 0
+\end{equation}
+
+Each valid path \(\pi\) is represented by its ordered node sequence, lag indices and its terminal edge \((i,j,\ell)\). These are then used to construct a \textit{prior tensor} \(\mathcal{P} \in \left\{0,1,2\right\}^{V_{\max} \times V_{\max} \times \ell_{\max}}\), encoding prior knowledge as:
+
+\begin{equation}
+\mathcal{P}_{ji\ell} =
+\begin{cases}
+0, & \text{no prior knowledge available},\\
+1, & \text{if edge/path \(X^i_{t-\ell} \rightarrow X^j_t\) is known to exist},\\
+2, & \text{if edge/path \(X^i_{t-\ell} \rightarrow X^j_t\) is known to not exist}
+\end{cases}
+\end{equation}
+
+
+\begin{algorithm}[h!]
+\caption{Path Extraction in Temporal Causal Graph (FINDPATHS)}
+\label{alg:find-paths}
+\begin{algorithmic}[1]
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
+\REQUIRE Lagged adjacency tensor $\mathcal{Y} \in \mathbb{R}^{V \times V \times \ell_{\max}}$, maximum path length $L$
+\ENSURE Set of valid paths $\mathcal{P}$ (each with \texttt{nodes}, \texttt{lags}, and \texttt{last\_edge})
+\STATE Initialize edge map $\texttt{edges} \gets \emptyset$
+\FOR{each $(i,j,k)$ with $\mathcal{Y}[j,i,k] > 0$}
+    \STATE $\ell \gets \ell_{\max} - k$
+    \STATE Append $(j,\ell)$ to $\texttt{edges}[i]$
+\ENDFOR
+\STATE $\texttt{paths} \gets \emptyset$
+\FOR{$s = 1$ to $V$}
+    \STATE $\texttt{stack} \gets [([s], [], 0, 1.0)]$ \COMMENT{Each element: (nodes, lags, depth, strength)}
+    \WHILE{$\texttt{stack}$ not empty}
+        \STATE Pop $(\texttt{nodes}, \texttt{lags}, \texttt{depth}, \texttt{strength})$
+        \STATE $u \gets \texttt{nodes}[-1]$
+        \IF{$u \notin \texttt{edges}$}
+            \STATE \textbf{continue}
+        \ENDIF
+        \FOR{each $(v, \ell) \in \texttt{edges}[u]$}
+            \IF{$v \in \texttt{nodes}$}
+                \STATE \textbf{continue} \COMMENT{Avoid cycles}
+            \ENDIF
+            \STATE $\texttt{new\_nodes} \gets \texttt{nodes} + [v]$
+            \STATE $\texttt{new\_lags} \gets \texttt{lags} + [\ell]$
+            \STATE $\texttt{new\_strength} \gets \texttt{strength} \times \mathbf{1}[\mathcal{Y}[v,u,\ell_{\max}-\ell] > 0]$
+            \IF{$|\texttt{new\_nodes}| \geq 2$ and $\texttt{new\_strength} > 0$}
+                \STATE Append $\{\texttt{nodes}=\texttt{new\_nodes}, \texttt{lags}=\texttt{new\_lags}, \texttt{last\_edge}=(u,v,\ell)\}$ to $\texttt{paths}$
+            \ENDIF
+            \IF{$\texttt{depth} + 1 < L$}
+                \STATE Push $(\texttt{new\_nodes}, \texttt{new\_lags}, \texttt{depth}+1, \texttt{new\_strength})$ onto $\texttt{stack}$
+            \ENDIF
+        \ENDFOR
+    \ENDWHILE
+\ENDFOR
+\RETURN $\texttt{paths}$
+\end{algorithmic}
+\end{algorithm}
+
+
+\subsection{Prior-Weighted Binary Cross Entropy}
+
+During training, both the ground-truth lagged graph \(\mathbb{A}\) and the model's prediction \(\hat{\mathbb{A}}\) are utilized to infer candidate paths, both for sampling prior knowledge from the ground truth as well as for comparing against predicted paths from the model's prediction. These tensors are flattened across variables and lags to form two aligned tensors. A \textit{prior-weighted binary cross-entropy loss} is then defined over the subset of indices where prior knowledge is available, i.e., where \(\mathcal{P}_{ji\ell} \neq 0\), since absence of knowlege is encoded by zeros, including these terms in the loss would prove misleading. To handle the definition and properties of binary cross-entropy (as elaborated in Subsection \ref{subsec:bce}), a remapped \textit{target prior distribution} must be defined as \(p_{\text{target}}(j,i,\ell) = 1\) if \(\mathcal{P}_{ji\ell} = 1\) and \(p_{\text{target}}(j,i,\ell) = 0\) if \(\mathcal{P}_{ji\ell} = 2\). The total prior-weighted loss is then composed of two complementary parts, one for inclusion priors and one for exclusion priors:
+
+\begin{equation}
+    \mathcal{L}_\text{inc} = \sum_{(j,i,\ell): \mathcal{P}_{ji\ell} = 1} b_{ji\ell} \odot \text{BCE}(\hat{\mathbb{P}}_{ji\ell}, 1)
+\end{equation}
+
+\begin{equation}
+    \mathcal{L}_\text{exc} = \sum_{(j,i,\ell): \mathcal{P}_{ji\ell} = 2} b_{ji\ell} \odot \text{BCE}(\hat{\mathbb{P}}_{ji\ell}, 0)
+\end{equation}
+
+where \(\hat{\mathbb{P}}_{ji\ell}\) denotes the corresponding predicted paths based on the output \(\hat{\mathbb{A}}\) of an LCM and \(b_{ji\ell}\) are the corresponding belief strength weights of the belief strength tensor \(\mathcal{B}\). Essentially, a loss between the predicted and true prior path distributions is computed for each valid prior entry. Weighted by the number of valid prior entries \(N_{\text{priors}}\), the prior regularization term becomes
+
+\begin{equation}
+\mathcal{L}_{\text{prior}} = \frac{\lambda_{\text{prior}}}{N_{\text{priors}}} \left(\mathcal{L}_\text{inc} + \mathcal{L}_\text{exc}\right)
+\end{equation}
+
+The term aims to softly enforce causal edges/path inclusions and exclusions, scaled by confidence weights. Consequently, the final loss function of a model trained with prior knowledge combines the base supervised objective, the correlation regularization, and the prior knowledge term, where the last two are scaled by regularization weights \(\lambda_{\text{CR}}\) and \(\lambda_{\text{prior}}\) respectively:
+
+\begin{equation}
+\mathcal{L}_{\text{LCM}} =
+\mathcal{L}_{\text{BCE}}
++ \lambda_{\text{CR}}\mathcal{L}_{\text{corr}}
++ \lambda_{\text{prior}}\mathcal{L}_{\text{prior}}
+\end{equation}
+
+In summary, this formulation allows prior information to be used probabilistically while training rather than deterministically.
+Inclusion priors softly encourage the model to predict higher confidence for known causal connections, weighted by the strength of the prior. Exclusion priors gently penalize unlikely edges, while entries with no prior knowledge are ignored. 
+
+
+\subsection{Staged Curriculum Learning} \label{sec:staged-curriculum-learning}
+
+Curriculum learning \citep{bengio2009curriculum} represents a training paradigm inspired by the way humans learn progressively: starting from simple concepts before tackling more complex ones. Within the ML domain, it has been formalized as a strategy for optimizing non-convex functions by structuring the training process according to sample difficulty. Instead of exposing a model to the full complexity of a dataset from the initial training stages, curriculum learning advocates a staged exposure: the model is first trained on easier, cleaner, or more reliable examples, and only later is it challenged with noisier or harder samples. This gradual shift has been shown to improve optimization stability, convergence to more favorable local minima, and generalization performance across domains such as computer vision, natural language processing, and reinforcement learning.
+
+This effectiveness is often attributed to its ability to allocate computational effort more efficiently: during the early stages, the model avoids being misled by noisy or ambiguous data, allowing it to establish strong inductive biases; later, the controlled introduction of harder examples prevents overfitting to simple patterns and pushes the model toward robustness. From an optimization standpoint, curriculum learning can be interpreted as a form of continuation method that smooths the loss landscape by deforming the training distribution over time.
+
+An important open question regarding both neural-based approaches and foundation models for causal discovery, is an \textit{efficient training regime to incorporate prior knowledge}. Motivated by these insights, we extend the curriculum learning principle to the incorporation of prior knowledge in causal discovery. In particular, we design a staged curriculum that does not merely vary sample difficulty, but instead varies the quality, type, and reliability of prior knowledge provided during training. This aims to provide a principled way to integrate domain knowledge without overwhelming the model early on, while still enforcing robustness to noisy or even misleading priors at later stages.
+
+\begin{figure}[t!]
+    \centering
+    \vspace{0.5em}
+\begin{tikzpicture}[
+  node distance=8mm and 8mm,
+  >=Stealth,
+  every node/.style={font=\sffamily\small, align=center},
+  phase/.style={draw, rounded corners, fill=blue!5, minimum width=16mm, minimum height=12mm, inner sep=4pt}
+]
+
+% Phase 0
+\node[phase] (P0) {\textbf{Phase 0}\\Pretraining\\ $\mathcal{L}_{\text{prior}}=0$};
+
+% Phase 1
+\node[phase, right=of P0] (P1) {\textbf{Phase 1}\\Inclusion priors\\High belief strengths};
+
+% Phase 2
+\node[phase, right=of P1] (P2) {\textbf{Phase 2}\\+Exclusion priors\\High belief strengths};
+
+% Phase 3
+\node[phase, right=of P2] (P3) {\textbf{Phase 3}\\+Noisy priors\\Robustness training};
+
+% Arrows
+\draw[->, thick] (P0) -- (P1);
+\draw[->, thick] (P1) -- (P2);
+\draw[->, thick] (P2) -- (P3);
+
+% Title above
+\node[font=\sffamily\bfseries, 
+      above=10mm of $(P0)!0.5!(P3)$] 
+      {Staged Curriculum Learning Phases};
+
+\end{tikzpicture}
+\vspace{0.5em}
+\caption{Overview of the proposed staged curriculum learning procedure. Training begins in Phase 0 with no prior knowledge, followed by gradually introducing true priors (Phase 1), exclusion priors (Phase 2), and noisy priors (Phase 3). Each stage builds on the model trained in the previous one, ensuring a smooth transition from data-only, learning to robust prior-informed causal discovery.}
+\label{fig:staged-curriculum}
+\end{figure}
+
+Our curriculum learning strategy is based around 4 distinct training phases. Each of these staged phases aim to progressively refine the model's ability to leverage prior knowledge with varying belief strengths. For each Phase \(i\), training begins using the pre-trained models of Phase \(i-1\), apart from Phase 0 in which the model is trained from scratch. An overview of the process is shown in Figure \ref{fig:staged-curriculum}.
+
+\paragraph{Phase 0 - Pretraining (Data-Only Learning).}
+The first stage, which we denote as Phase 0, establishes the foundation of the curriculum. At this point, the model is trained exclusively on the observational and interventional data without any form of prior knowledge. All prior-related inputs, such as prior tensors and belief strengths, are initialized to zero, resulting in the prior knowledge loss term vanishing, i.e., \( \mathcal{L}_{\text{prior}} = 0 \). This ensures that the model develops a baseline representation and learns to capture causal dependencies solely from the raw data. Importantly, although priors are not yet informative, the model architecture is already adapted to handle the additional input dimensions reserved for priors, thereby avoiding any architectural mismatch when subsequent phases introduce prior information. In this sense, Phase 0 provides a clean initialization point for the following stages.
+
+\paragraph{Phase 1 - Incorporating Inclusion Priors.}
+Once the baseline is established, we gradually expose the model to informative priors in Phase 1. Specifically, we sample a subset of ground-truth causal relations (edges or paths that exist) and inject them into the model as prior signals. These are provided with high belief strengths, drawn from the interval \(\mathcal{B}_{ji\mathcal{l}}\) sampled from \(\mathcal{U}(0.7,1)\), reflecting strong confidence in their correctness. By combining the learned representations from Phase 0 with these informative signals, the model is encouraged to align its predictions with reliable causal structures. To balance the contributions of different objectives, we set the binary cross-entropy edge classification loss coefficient to \(1.0\) and the prior knowledge loss coefficient to \(0.5\). This weighting scheme ensures that while prior knowledge influences training, it does not dominate the optimization, allowing the model to maintain flexibility in adapting to data
+
+\paragraph{Phase 2 - Introducing Exclusion Priors.}
+After the model has successfully integrated inclusion priors, Phase 2 introduces exclusion priors, i.e., the absence of certain causal edges. These are likewise injected with high belief strengths \( \mathcal{U}(0.7, 1)\), serving as strong negative examples. From an optimization perspective, this phase provides an additional form of regularization by pruning spurious dependencies the model might otherwise overfit to. The same loss weighting strategy as in Phase 1 is maintained, striking a balance between edge classification accuracy and prior consistency. Taken together, Phases 1 and 2 guide the model through a stage of “structured learning,” where it learns to incorporate both positive and negative causal evidence into its reasoning.
+
+\paragraph{Phase 3 - Robustness to Noisy Priors.}
+The final stage of the curriculum, Phase 3, aims to ensure robustness to imperfect prior knowledge. In practical applications, domain knowledge is often noisy, incomplete, or even contradictory. To prepare the model for such scenarios, we deliberately introduce noisy priors that include both wrong inclusions  and false exclusions, drawn with varying belief strengths. Unlike earlier stages, where priors served primarily as reliable guidance, this phase trains the model to weigh prior information against the data more critically. To avoid model collapse, learning rate is halved during this stage. By exposing the model to uncertainty and potential misinformation, Phase 3 acts as a robustness training stage, preventing overreliance on priors and encouraging adaptive integration of knowledge and evidence. This is particularly important in large-scale causal discovery settings, where domain knowledge may be abundant but not uniformly reliable.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+%\subsection{Random Prior Knowledge Sampling}
+%
+%We now refer to the methodology for obtaining edges/paths from the given ground truth graph and a paired belief strength tensor during training. For each causal graph in each training datch, we extract paths according to \textsc{FINDPATHS}, as described in Algorithm \ref{alg:find-paths}. 
+%
+%In brief, the algorithm unrolls the time-lagged causal graph and performs depth-first search (DFS) to extract all valid paths of length \(L\). We consider paths up to length \(\ell_{\max}\). It enumerates all directed causal paths up to a given maximum length \(L\) bounded by \(\ell_{\max}\) within a lagged adjacency tensor \( \mathbb{A} \in \mathbb{R}^{V_{\max} \times V_{\max} \times \ell_{\max}}\). Each directed edge \((i \rightarrow j, \ell)\) is considered active whenever \( \mathbb{A}_{ji\ell} > 0 \), indicating a positive influence from variable \(V^i\) to \(V^j\) at lag \(\ell\). From there, the ground truth lagged causal graph is initially binarized. Starting from every variable, a depth-first search (DFS) traversal unrolls the graph by expanding all active outgoing edges iteratively, thereby constructing all acyclic causal paths of length up to \(L\). In our implementation, cycles are being avoided, although the forward in-time nature of the causal graph does not preclude cycles. During traversal, the algorithm maintains a Boolean accumulator that encodes the validity of a partial path. This accumulator is updated multiplicatively as follows
+%
+%\begin{equation}
+%\texttt{strength} \leftarrow \texttt{strength} \times \mathbf{1}[\mathcal{Y}[v,u,\ell] > 0]
+%\end{equation}
+%
+%ensuring that only paths for which all constituent edges are active are retained. Formally, a valid causal path
+%
+%\begin{equation}
+%\pi = {(u_t, u_{t+1}, \ell_t)}*{t=1}^{m}
+%\end{equation}
+%
+%is included in the output if and only if
+%
+%\begin{equation}
+%\prod*{t=1}^{m} \mathbf{1}[\mathcal{Y}[u_{t+1}, u_t, \ell_t] > 0] > 0.
+%\end{equation}
+%
+%The algorithm returns a list of dictionaries, each describing a valid path with its ordered node sequence, corresponding lag values, and the terminal edge \((i,j,\ell)\). These extracted paths are later used for sampling and constructing prior-knowledge tensors in the training pipeline when accounting for prior knowledge.
+%
+%\begin{algorithm}[h!]
+%\caption{Path Extraction in Temporal Causal Graph (FINDPATHS)}
+%\label{alg:find-paths}
+%\begin{algorithmic}[1]
+%\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+%\renewcommand{\algorithmicensure}{\textbf{Output:}}
+%\REQUIRE Lagged adjacency tensor $\mathcal{Y} \in \mathbb{R}^{V \times V \times \ell_{\max}}$, maximum path length $L$
+%\ENSURE Set of valid paths $\mathcal{P}$ (each with \texttt{nodes}, \texttt{lags}, and \texttt{last\_edge})
+%\STATE Initialize edge map $\texttt{edges} \gets \emptyset$
+%\FOR{each $(i,j,k)$ with $\mathcal{Y}[j,i,k] > 0$}
+%    \STATE $\ell \gets \ell_{\max} - k$
+%    \STATE Append $(j,\ell)$ to $\texttt{edges}[i]$
+%\ENDFOR
+%\STATE $\texttt{paths} \gets \emptyset$
+%\FOR{$s = 1$ to $V$}
+%    \STATE $\texttt{stack} \gets [([s], [], 0, 1.0)]$ \COMMENT{Each element: (nodes, lags, depth, strength)}
+%    \WHILE{$\texttt{stack}$ not empty}
+%        \STATE Pop $(\texttt{nodes}, \texttt{lags}, \texttt{depth}, \texttt{strength})$
+%        \STATE $u \gets \texttt{nodes}[-1]$
+%        \IF{$u \notin \texttt{edges}$}
+%            \STATE \textbf{continue}
+%        \ENDIF
+%        \FOR{each $(v, \ell) \in \texttt{edges}[u]$}
+%            \IF{$v \in \texttt{nodes}$}
+%                \STATE \textbf{continue} \COMMENT{Avoid cycles}
+%            \ENDIF
+%            \STATE $\texttt{new\_nodes} \gets \texttt{nodes} + [v]$
+%            \STATE $\texttt{new\_lags} \gets \texttt{lags} + [\ell]$
+%            \STATE $\texttt{new\_strength} \gets \texttt{strength} \times \mathbf{1}[\mathcal{Y}[v,u,\ell_{\max}-\ell] > 0]$
+%            \IF{$|\texttt{new\_nodes}| \geq 2$ and $\texttt{new\_strength} > 0$}
+%                \STATE Append $\{\texttt{nodes}=\texttt{new\_nodes}, \texttt{lags}=\texttt{new\_lags}, \texttt{last\_edge}=(u,v,\ell)\}$ to $\texttt{paths}$
+%            \ENDIF
+%            \IF{$\texttt{depth} + 1 < L$}
+%                \STATE Push $(\texttt{new\_nodes}, \texttt{new\_lags}, \texttt{depth}+1, \texttt{new\_strength})$ onto $\texttt{stack}$
+%            \ENDIF
+%        \ENDFOR
+%    \ENDWHILE
+%\ENDFOR
+%\RETURN $\texttt{paths}$
+%\end{algorithmic}
+%\end{algorithm}
+
+
