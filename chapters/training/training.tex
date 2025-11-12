@@ -118,6 +118,24 @@ All models are trained on the curated datasets described in Chapter \ref{chap:da
 
 This section covers techniques in the optimizer and training protocol that help overcome challenges encountered when training not only our LCMs but deep neural architectures in general. As models become larger and datasets more complex, effective training is impeded by issues such as limited computational resources, data quality and quantity constraints, optimization difficulties like vanishing gradients, training instability, and overfitting. Remedies including advanced optimizer designs, learning rate scheduling, gradient accumulation, regularization, and adaptive training strategies enable more efficient and stable learning. By understanding and addressing these challenges with appropriate methods, it becomes possible to train larger, more accurate models that generalize well to unseen data.
 
+\subsection{Weight Initialization} \label{sec:init}
+
+To ensure stable gradient propagation and efficient convergence, all linear and convolutional layers in the LCM are initialized using the \textit{Kaiming--He initialization} scheme \citep{he2015delving}. This approach adjusts the variance of the initial weights to maintain a consistent signal magnitude across layers and prevent vanishing or exploding activations. 
+
+Formally, for a layer with weight matrix \(W \in \mathbb{R}^{n_{\text{out}} \times n_{\text{in}}} \), each element is initialized as
+
+\begin{equation}
+    W_{ij} \sim \mathcal{N}\left(0, \frac{2}{n_{\text{in}}}\right),
+    \label{eq:kaiming-init}
+\end{equation}
+
+where \(n_{\text{in}}\) denotes the number of input units to the layer. Bias terms are initialized to zero:
+
+\begin{equation}
+    b_i = 0 \quad \forall i.
+\end{equation}
+
+The initialization method also provided a consistent performance baseline across training and fine-tuning stages, reducing sensitivity to the learning rate and batch size.
 
 \subsection{Gradient Accumulation}
 
@@ -424,13 +442,13 @@ An important open question regarding both neural-based approaches and foundation
 Our curriculum learning strategy is based around 4 distinct training phases. Each of these staged phases aim to progressively refine the model's ability to leverage prior knowledge with varying belief strengths. For each Phase \(i\), training begins using the pre-trained models of Phase \(i-1\), apart from Phase 0 in which the model is trained from scratch. An overview of the process is shown in Figure \ref{fig:staged-curriculum}.
 
 \paragraph{Phase 0 - Pretraining (Data-Only Learning).}
-The first stage, which we denote as Phase 0, establishes the foundation of the curriculum. At this point, the model is trained exclusively on the observational and interventional data without any form of prior knowledge. All prior-related inputs, such as prior tensors and belief strengths, are initialized to zero, resulting in the prior knowledge loss term vanishing, i.e., \( \mathcal{L}_{\text{prior}} = 0 \). This ensures that the model develops a baseline representation and learns to capture causal dependencies solely from the raw data. Importantly, although priors are not yet informative, the model architecture is already adapted to handle the additional input dimensions reserved for priors, thereby avoiding any architectural mismatch when subsequent phases introduce prior information. In this sense, Phase 0 provides a clean initialization point for the following stages.
+The first stage, which we denote as Phase 0, establishes the foundation of the curriculum. At this point, the model is trained exclusively on the observational and interventional data without any form of prior knowledge. All prior-related inputs, such as prior tensors and belief strengths, are initialized and set to zero, resulting in the prior knowledge loss term vanishing, i.e., \( \mathcal{L}_{\text{prior}} = 0 \). This ensures that the model develops a baseline representation and learns to capture causal dependencies solely from the raw data. Importantly, although priors are not yet informative, the model architecture is already adapted to handle the additional input dimensions reserved for priors, thereby avoiding any architectural mismatch when subsequent phases introduce prior information. In this sense, Phase 0 provides a clean initialization point for the following stages.
 
 \paragraph{Phase 1 - Incorporating Inclusion Priors.}
 Once the baseline is established, we gradually expose the model to informative priors in Phase 1. Specifically, we sample a subset of ground-truth causal relations (edges or paths that exist) and inject them into the model as prior signals. These are provided with high belief strengths, drawn from the interval \(\mathcal{B}_{ji\mathcal{l}}\) sampled from \(\mathcal{U}(0.7,1)\), reflecting strong confidence in their correctness. By combining the learned representations from Phase 0 with these informative signals, the model is encouraged to align its predictions with reliable causal structures. To balance the contributions of different objectives, we set the binary cross-entropy edge classification loss coefficient to \(1.0\) and the prior knowledge loss coefficient to \(0.5\). This weighting scheme ensures that while prior knowledge influences training, it does not dominate the optimization, allowing the model to maintain flexibility in adapting to data
 
 \paragraph{Phase 2 - Introducing Exclusion Priors.}
-After the model has successfully integrated inclusion priors, Phase 2 introduces exclusion priors, i.e., the absence of certain causal edges. These are likewise injected with high belief strengths \( \mathcal{U}(0.7, 1)\), serving as strong negative examples. From an optimization perspective, this phase provides an additional form of regularization by pruning spurious dependencies the model might otherwise overfit to. The same loss weighting strategy as in Phase 1 is maintained, striking a balance between edge classification accuracy and prior consistency. Taken together, Phases 1 and 2 guide the model through a stage of “structured learning,” where it learns to incorporate both positive and negative causal evidence into its reasoning.
+After the model has successfully integrated inclusion priors, Phase 2 introduces exclusion priors, i.e., the absence of certain causal edges. These are likewise injected with high belief strengths \(\mathcal{U}(0.7, 1)\), serving as strong negative examples. From an optimization perspective, this phase provides an additional form of regularization by pruning spurious dependencies the model might otherwise overfit to. The same loss weighting strategy as in Phase 1 is maintained, striking a balance between edge classification accuracy and prior consistency. Taken together, Phases 1 and 2 guide the model through a stage of “structured learning,” where it learns to incorporate both positive and negative causal evidence into its reasoning.
 
 \paragraph{Phase 3 - Robustness to Noisy Priors.}
 The final stage of the curriculum, Phase 3, aims to ensure robustness to imperfect prior knowledge. In practical applications, domain knowledge is often noisy, incomplete, or even contradictory. To prepare the model for such scenarios, we deliberately introduce noisy priors that include both wrong inclusions  and false exclusions, drawn with varying belief strengths. Unlike earlier stages, where priors served primarily as reliable guidance, this phase trains the model to weigh prior information against the data more critically. To avoid model collapse, learning rate is halved during this stage. By exposing the model to uncertainty and potential misinformation, Phase 3 acts as a robustness training stage, preventing overreliance on priors and encouraging adaptive integration of knowledge and evidence. This is particularly important in large-scale causal discovery settings, where domain knowledge may be abundant but not uniformly reliable.
