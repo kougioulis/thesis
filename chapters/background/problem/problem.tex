@@ -59,14 +59,14 @@ $V^3_t$ & 0 & \textbf{1} & 0 \\
 
 \vspace{1.5em}
 %\scriptsize
-\textbf{Interpretation:} $\mathbb{A}^{(0)}_{ji}=1$ indicates a directed edge $V^i_{t-1} \!\rightarrow\! V^j_t$.  For $\ell_{\max}=1$, the lag index is $\ell=0$.
+\textbf{Interpretation:} \(\mathbb{A}^{(0)}_{ji}=1\) indicates a directed edge \(V^i_{t-1} \!\rightarrow\! V^j_t\).  For \(\ell_{\max}=1\), the slice index is \(0\).
 \end{minipage}
 \vspace{0.5em}
-\caption{Illustrative example of a lagged causal graph with \(\ell_{\max}=1\) (left) and its corresponding lagged adjacency tensor (right), for a three-variable case and \(\ell_{\max}=1\). The tensor entry \(\mathbb{A}_{ji\ell_{\max}-\ell}\) indicates whether a directed causal edge from \(V^i_{t-\ell}\) to \(V^j_t\) exists. The LCM performs causal discovery by inferring \(\hat{\mathbb{A}}\), aiming to recover the true adjacency tensor \(\mathbb{A}\).}
+\caption{Illustrative example of a three-variable lagged causal graph with \(\ell_{\max}=1\) (left) and its corresponding lagged adjacency tensor (right) of shape \([3,3,1]\). The tensor entry \(\mathbb{A}_{j,i,\ell_{\max}-\ell}\) indicates whether a directed causal edge from \(V^i_{t-\ell}\) to \(V^j_t\) exists.}
 \label{fig:lagged-tensor-example}
 \end{figure}
 
-Formally, we seek to construct a \textit{pre-trained neural architecture capable of learning causal graphs from time-series data}. Recall from Section \ref{sec:setting} that the objective of causal discovery is to infer the underlying causal graph \( \mathcal{G} \sim \mathcal{D} \) of a dataset \( \mathcal{D} \sim \mathcal{P}_{\mathcal{D}} \). Our task is to build a \textit{large causal model} (LCM), a foundation model capable of performing causal discovery directly from time-series data, outputting a temporal causal DAG from varying input lengths, domains, and underlying causal mechanisms. Let \(\mathbf{X} = \{ \mathbf{X}_t \}_{t=1}^{n} \in \mathbb{R}^{n \times k}, \quad \mathbf{X}_t = (X_t^1, \ldots, X_t^k) \in \mathbb{R}^k\) denote a multivariate time series with \(n\) timesteps and \(k\) variables. The goal of an LCM is to infer a time-lagged causal graph that captures the directed temporal dependencies among the variables. Specifically:
+Formally, we seek to construct a \textit{pre-trained neural architecture capable of learning causal graphs from time-series data}. Recall from Section \ref{sec:setting} that the objective of causal discovery is to infer the underlying causal graph \(\mathcal{G} \sim \mathcal{D}\) of a dataset \(\mathcal{D} \sim \mathcal{P}_{\mathcal{D}}\). Our task is to build a \textit{large causal model} (LCM), a foundation model capable of performing causal discovery directly from time-series data, outputting a temporal causal DAG from varying input lengths, domains, and underlying causal mechanisms. Let \(\mathbf{X} = \{ \mathbf{X}_t \}_{t=1}^{n} \in \mathbb{R}^{n \times k}, \quad \mathbf{X}_t = (X_t^1, \ldots, X_t^k) \in \mathbb{R}^k\) denote a multivariate time series with \(n\) timesteps and \(k\) variables. The goal of an LCM is to infer a time-lagged causal graph that captures the directed temporal dependencies among the variables. Specifically:
 
 %\begin{definition}[Large Causal Model]
 A \textit{large causal model (LCM)} is a parametric function \(f_\theta\) mapping a multivariate time series \(\mathbf{X}\) to a \textit{lagged causal adjacency tensor}
