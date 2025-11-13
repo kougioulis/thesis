@@ -19,31 +19,3 @@ We begin with an introduction to the context of data generation (Section \ref{se
 \input{chapters/data/interv}
 
 \input{chapters/data/training}
-
-%\section{Generating Permuted Data Pairs} \label{sec:data-augmentation}
-%
-%\begin{algorithm}[ht!]
-%\caption{Permutation-based Data Augmentation}
-%\label{alg:permuted-pairs}
-%\begin{algorithmic}[1]
-%\renewcommand{\algorithmicrequire}{\textbf{Input:}}
-%\renewcommand{\algorithmicensure}{\textbf{Output:}}
-%\REQUIRE Dataset $\mathcal{D} = \{(X_i, G_i)\}_{i=1}^N$ of time-series $X_i$ and ground-truth graphs $G_i$, Number of permutations per pair $\sigma$
-%\ENSURE Augmented dataset $\mathcal{D}_\text{augmented}$
-%\STATE Initialize $\mathcal{D}_\text{augmented} \gets \emptyset$
-%\FOR{each $(X_i, G_i) \in \mathcal{D}$}
-%    \STATE Add $(X_i, G_i)$ to $\mathcal{D}_\text{augmented}$
-%    \FOR{$j = 1 \to \sigma$}
-%        \STATE Sample a random permutation $\pi$ over the $d$ variables of $X_i$
-%        \STATE Apply $\pi$ to time-series: $X_i' \gets \pi(X_i)$
-%        \STATE Apply $\pi$ to causal graph: $G_i' \gets \pi(G_i)$
-%        \STATE Add $(X_i', G_i')$ to $\mathcal{D}_\text{augmented}$
-%    \ENDFOR
-%\ENDFOR
-%\RETURN $\mathcal{D}_\text{augmented}$
-%\end{algorithmic}
-%\end{algorithm}
-%
-%An observed drawback of the work by \cite{stein2024embracing} is that predictions are not \textit{permutation invariant} with respect to input. Consider an (observational) input of the time-series \(X,Y,Z\) where \(X\) causes \(Y\) with lag \(1\). If the time-series input is permuted column-wise (i.e. only the ordering of the variables changes), the model may infer a different causal graph. 
-%
-%To address this and as a step towards permutation-invariant predictions of our LCMs, we augment the training data by generating \(\sigma\) permuted datasets for each pair of time-series and their ground truth causal graph. We permute (i) the observational time-series samples and (ii) the corresponding ground truth lagged adjacency tensor accordingly. As for \(d\) variables there exist \(d!\) possible permutations, we fix \(\sigma=3\) which both approximates invariance and results in a much larger training and testing corpus. Pseudocode for this augmentation step is provided in Algorithm \ref{alg:permuted-pairs}. Without loss of generality, only observational data are assumed in the pseudocode.  
