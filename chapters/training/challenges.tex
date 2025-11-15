@@ -1,0 +1,178 @@
+\section{Training Challenges \& Practical Remedies}
+
+This section covers techniques in the optimizer and training protocol that help overcome challenges encountered when training not only our LCMs but deep neural architectures in general. As models become larger and datasets more complex, effective training is impeded by issues such as limited computational resources, data quality and quantity constraints, optimization difficulties like vanishing gradients, training instability, and overfitting. Remedies including advanced optimizer designs, learning rate scheduling, gradient accumulation, regularization, and adaptive training strategies enable more efficient and stable learning. By understanding and addressing these challenges with appropriate methods, it becomes possible to train larger, more accurate models that generalize well to unseen data.
+
+\subsection{Weight Initialization} \label{sec:init}
+
+To ensure stable gradient propagation and efficient convergence, all linear and convolutional layers in the LCM are initialized using the \textit{Kaiming--He initialization} scheme \citep{he2015delving}. This approach adjusts the variance of the initial weights to maintain a consistent signal magnitude across layers and prevent vanishing or exploding activations. 
+
+Formally, for a layer with weight matrix \(W \in \mathbb{R}^{n_{\text{out}} \times n_{\text{in}}} \), each element is initialized as
+
+\begin{equation}
+    W_{ij} \sim \mathcal{N}\left(0, \frac{2}{n_{\text{in}}}\right),
+    \label{eq:kaiming-init}
+\end{equation}
+
+where \(n_{\text{in}}\) denotes the number of input units to the layer. Bias terms are initialized to zero:
+
+\begin{equation}
+    b_i = 0 \quad \forall i.
+\end{equation}
+
+The initialization method also provided a consistent performance baseline across training and fine-tuning stages, reducing sensitivity to the learning rate and batch size.
+
+\subsection{Gradient Accumulation}
+
+\begin{figure}[t!]
+    \centering
+\begin{tikzpicture}[
+  node distance=6mm and 6mm, 
+  >=Stealth, 
+  every node/.style={font=\sffamily\small}, 
+  box/.style={draw,rounded corners,inner sep=3pt,minimum width=22mm,align=center},
+  fwd/.style={box,fill=blue!8},
+  bwd/.style={box,fill=orange!8},
+  acc/.style={box,fill=green!8},
+  opt/.style={box,fill=purple!8}
+]
+
+% Microbatches
+\node[fwd] (F1) {Microbatch 1\\Forward pass\\(loss $L_1$)};
+\node[bwd, right=of F1] (B1) {Backward\\(grad $g_1$)};
+\draw[->] (F1) -- (B1);
+
+\node[fwd, below=of F1] (F2) {Microbatch 2\\Forward pass\\(loss $L_2$)};
+\node[bwd, right=of F2] (B2) {Backward\\(grad $g_2$)};
+\draw[->] (F2) -- (B2);
+
+\node[fwd, below=of F2] (F3) {Microbatch 3\\Forward pass\\(loss $L_3$)};
+\node[bwd, right=of F3] (B3) {Backward\\(grad $g_3$)};
+\draw[->] (F3) -- (B3);
+
+\node[fwd, below=of F3] (F4) {Microbatch 4\\Forward pass\\(loss $L_4$)};
+\node[bwd, right=of F4] (B4) {Backward\\(grad $g_4$)};
+\draw[->] (F4) -- (B4);
+
+% Grad ccumulator box
+\node[acc, right=8mm of B2, minimum width=28mm] (ACC) {\(\nabla\) Accumulator\\$G \gets G + g_i$};
+
+\foreach \X in {B1,B2,B3,B4} {
+  \draw[->] (\X.east) -- ++(2mm,0) |- (ACC.west);
+}
+
+% Optimizer box 
+\node[opt, right=8mm of ACC, minimum width=28mm] (OPT) {Optimizer step\\$\theta \gets \theta - \eta \cdot \tfrac{1}{k} G$};
+\draw[->] (ACC.east) -- (OPT.west);
+
+% Reset arrow
+\draw[->, dashed, thick] (OPT.east) -- ++(5mm,0) |- (ACC.south)
+  %node[pos=0.35,right,align=left] {\small reset $G \leftarrow 0$};
+  node[pos=0.85,below,align=center] {reset $G \leftarrow 0$};
+
+% Header
+\node[above=2mm of F1, font=\sffamily\bfseries] {Gradient Accumulation ($k=4$)};
+
+% Brace
+\draw[decorate,decoration={brace,amplitude=5pt}] 
+  ($(F1.north west)+(-3mm,3mm)$) -- ($(F4.south west)+(-3mm,-3mm)$) 
+  node[midway,left=2mm,align=center] {Microbatches\\$(1,\ldots,k)$};
+
+\end{tikzpicture}
+\caption{Illustration of the gradient accumulation method \citep{huang2019gpipe}. Instead of performing a parameter update after a single batch, gradients from multiple forward and backward passes of smaller batches (microbatches) are sequentially accumulated in a dedicated buffer (the \textit{gradient accumulator}). After \(k\) microbatches, the aggregated gradient (summed or averaged) is applied in a single optimizer step to update the model parameters, followed by a reset of the accumulator. This approach allows training with effectively larger batch sizes while reducing memory usage, since only one microbatch needs to reside in memory at a time.}
+\label{fig:grad-accumulation}
+\end{figure}
+
+As deep neural networks become larger on the number of parameters, an important issue is training under memory constraints. For the most part, training deep neural architectures require large amounts of memory resources for storing model parameters and their gradients, even for just fine-tuning of pre-trained large scale models. A significant question is thus how to allow efficient training when memory resources are limited. In literature, primarily two memory reduction methods have been introduced to tackle the aforementioned problem: \textit{gradient accumulation} \citep{huang2019gpipe} and \textit{gradient release} \citep{pudipeddi2020training}.
+
+Gradient accumulation allows us to simulate training with a larger \textit{effective batch size} by reducing the activation memory. As illustrated in Figure \ref{fig:grad-accumulation}, instead of updating parameters after every mini-batch, we compute gradients for several small mini-batches (\textit{microbatches}), accumulate them in memory and only apply the optimizer update once after \(k\) steps (selecting \(k=4\) for large models). This means the effective batch size = (mini-batch size) \(\times\) (accumulation steps). Gradient accumulation allows training of large-scale LCMs by simulating larger batch sizes when memory limitations prevent larger batch sizes. This is crucial since each batch may consist of hundreds of multivariate time-series samples with long temporal horizons. By accumulating gradients over \(k=4\) steps before applying an update, we approximate the stability of training with a larger batch (known as the \textit{effective batch size}). Algorithm \ref{alg:grad-accumulation} describes the gradient accumulation method.
+
+This approach has been experimentally shown to have no negative impact on training and convergence, although a small trade-off exists: In a sense, small batches can be noisy and thus lead to some training instability, or have a regularizing effect and lead to a better global minimum, while larger batches can be more stable but generalize less well.
+
+In all training experiments, we utilize an \textit{effective batch size of \(B=64\)}. We thus select \(k=4\) when gradient accumulation is used for large-scale models (\( > 10M\) parameters) to simulate an effective batch size of \(B\).  
+
+\begin{algorithm}[ht!]
+\caption{Gradient Accumulation} \label{alg:grad-accumulation}
+\begin{algorithmic}[1]
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
+\REQUIRE Accumulation steps $k$, optimizer, model $f_\theta$, dataset $\mathcal{D}$
+\ENSURE Updated parameters $\theta$
+\STATE $step \gets 0$
+\FOR{each epoch}
+    \FOR{microbatch $B \subseteq \mathcal{D}$}
+        \STATE Compute loss $L_B \gets \mathcal{L}(f_\theta(B))$
+        \STATE Compute gradients $g_B \gets \nabla_\theta L_B$
+        \STATE Accumulate gradients: $G \gets G + g_B$
+        \STATE $step \gets step + 1$
+        \IF{$step \bmod k = 0$}
+            \STATE Update parameters: $\theta \gets \theta - \eta \cdot G$
+            \STATE Reset accumulator $G \gets 0$
+        \ENDIF
+    \ENDFOR
+\ENDFOR
+\end{algorithmic}
+\end{algorithm}
+
+
+\subsection{Early Stopping}
+
+Early stopping (Algorithm \ref{alg:early-stopping}) is a fundamental regularization technique when training of machine learning models. The main objective is to prevent overfitting (i.e. the model learns the training data's noise and idiosyncrasies rather than its underlying patterns) by monitoring the validation loss over epochs. The algorithm uses two key hyperparameters to achieve this goal: (i) the \textit{minimum improvement threshold} \(\delta\), which is a small margin designed to prevent the algorithm from terminating prematurely due to minor, non-significant fluctuations in the validation loss and (ii) the \textit{patience term} \(\rho\) which specifies the number of epochs to wait for a significant improvement in the validation loss before stopping. We adopt a patience value of \(\rho=20\) to accommodate the often slow and fluctuating convergence patterns observed in the training of deep neural networks, allowing the model to adapt through periods of stagnated improvement without premature termination.
+
+\begin{algorithm}[t!]
+\caption{Early Stopping for LCM Training} \label{alg:early-stopping}
+\begin{algorithmic}[1]
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
+\REQUIRE Validation loss sequence $\{val\_loss^{(e)}\}$, patience $p$, minimum improvement $\delta$
+\ENSURE Best epoch $e^*$ or stop signal
+
+\STATE $best\_val\_loss \gets \infty$
+\STATE $counter \gets 0$
+\FOR{epoch $e = 1, 2, \dots$}
+    \STATE Compute $val\_loss^{(e)}$
+    \IF{$val\_loss^{(e)} < best\_val\_loss - \delta$}
+        \STATE $best\_val\_loss \gets val\_loss^{(e)}$
+        \STATE $e^* \gets e$
+        \STATE $counter \gets 0$
+    \ELSE
+        \STATE $counter \gets counter + 1$
+    \ENDIF
+    \IF{$counter \geq p$}
+        \STATE \textbf{stop training} and return $e^*$
+    \ENDIF
+\ENDFOR
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Learning Rate Scheduler}
+
+\begin{algorithm}[h]
+\caption{Learning Rate Scheduler for LCM Training} \label{alg:scheduler}
+\begin{algorithmic}[1]
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
+\REQUIRE Initial learning rate $\eta$, reduction factor $\gamma < 1$, patience $p_{lr}$, min\_lr
+\ENSURE Adaptively updated $\eta$
+\STATE $best\_val\_loss \gets \infty$
+\STATE $counter \gets 0$
+\FOR{epoch $e = 1, 2, \dots$}
+    \STATE Compute $val\_loss^{(e)}$
+    \IF{$val\_loss^{(e)} < best\_val\_loss$}
+        \STATE $best\_val\_loss \gets val\_loss^{(e)}$
+        \STATE $counter \gets 0$
+    \ELSE
+        \STATE $counter \gets counter + 1$
+    \ENDIF
+    \IF{$counter \geq p_{lr}$}
+        \STATE $\eta \gets \max(\gamma \cdot \eta, min\_lr)$
+        \STATE $counter \gets 0$
+    \ENDIF
+\ENDFOR
+\end{algorithmic}
+\end{algorithm}
+
+A constant learning rate (independent of the epoch) can hinder effective training, as it can fail to adapt to the nature of the optimization landscape. In the initial stages of training, a high learning rate enables rapid traversal towards minima of the loss. However, as training progresses and the model approaches a local or global minimum, a large learning rate can lead to \textit{overshooting} and instability, leading to oscillatory behavior or even divergence.
+
+A learning rate scheduler (Algorithm \ref{alg:scheduler}) approach effectively addresses this problem by dynamically adjusting the learning rate \(\eta\) during training. The scheduler works by monitoring the validation loss and reducing the learning rate when there is no significant improvement for a specified number of epochs, known as \textit{learning rate patience} \(p_\text{lr}\). By decreasing the learning rate by a \textit{reduction factor} \(\gamma\), the optimizer takes smaller, more conservative steps, allowing for stable convergence towards the optimal causal structure. This prevents "over-updates" that could destabilize the discovery process and ensures the model can effectively fine-tune its parameters. This approach aligns with well-established adaptive learning rate strategies in deep learning. \citet{smith2017cyclical} introduced cyclic and adaptive learning rate methods that help efficiently explore the loss landscape and lead to better convergence. Early work by \citet{sutskever2013importance} also emphasized the importance of careful learning rate scheduling for stable optimization in deep networks.
+
+In all our experiments, we apply a reduction factor \(\gamma = 0.1\) after 10 epochs without improvement of the validation loss.

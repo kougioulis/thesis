@@ -1,0 +1,67 @@
+\section{Loss Functions} \label{sec:loss-functions}
+
+Since a neural network must learn the mapping from inputs to desired outputs, a fundamental requirement is a mechanism to quantify how “close” or “far” the network's predictions are from the ground truth. The loss function serves precisely this role—its magnitude measures the discrepancy between the model's estimates and the target causal structure. The optimization objective is therefore to minimize this loss across all training examples.
+
+\subsection{Binary Cross-Entropy Loss} \label{subsec:bce}
+
+For our LCMs, each possible directed edge \(V^i_{t-\ell} \rightarrow V^j_t\) in the lagged causal graph corresponds to a Bernoulli random variable encoding the presence or absence of a direct causal relationship. As elaborated in Section \ref{sec:problem-formulation}, predicting causal edges naturally takes the form of a binary classification task, where the model outputs a confidence score \(\hat{\mathbb{A}}_{ji\ell} \in [0,1]\) representing the estimated probability that a direct lagged edge \(V^i_{t-\ell} \rightarrow V^j_t\) exists.
+
+Let \(a_i \in {0,1}\) denote the ground-truth label for the \(i\)-th edge and \(\hat{a}_i \in [0,1]\) the model's predicted probability. The likelihood of the observed labels given the predictions can be modeled as a product of independent Bernoulli variables:
+
+\begin{equation}
+p(\mathbf{a} \mid \mathbf{\hat{a}}) = \prod_{i=1}^{N} \hat{a}_i^{a_i} (1 - \hat{a}_i)^{1 - a_i}
+\end{equation}
+
+where \(N = V_{\max}^2 \times \ell_{\max}\) is the total number of potential lagged edges. Maximizing this likelihood is equivalent to minimizing the \textit{negative log-likelihood (NLL)}:
+
+\begin{equation}
+\mathcal{L}_{\text{BCE}}(\mathbf{a}, \mathbf{\hat{a}})
+= -\frac{1}{N} \sum_{i=1}^{N} \left[ a_i \log(\hat{a}_i) + (1 - a_i) \log(1 - \hat{a}_i) \right]
+\label{eq:bce-basic}
+\end{equation}
+
+This defines the \textit{Binary Cross-Entropy (BCE)} loss, a standard choice for supervised binary prediction tasks. It penalizes incorrect predictions more heavily when the model is confident but wrong, owing to the logarithmic growth of the loss as \(\hat{a}_i \to 0\) for positive labels (\(a_i = 1\)) or \(\hat{a}_i \to 1\) for negative labels (\(a_i = 0\)).
+
+The model produces logits \(z_i \in \mathbb{R}\), which are converted to probabilities via the sigmoid function \(\hat{a}_i = \sigma(z_i) = (1 + e^{-z_i})^{-1}\). Substituting this into Equation \ref{eq:bce-basic} yields the BCE loss in terms of logits:
+
+\begin{equation}
+\mathcal{L}_{\text{BCEWithLogits}}(\mathbf{a}, \mathbf{z})
+= -\frac{1}{N} \sum_{i=1}^{N} \left[a_i \log \sigma(z_i) + (1 - a_i) \log (1 - \sigma(z_i))\right]
+\label{eq:bce-logits}
+\end{equation}
+
+For numerical stability, training employs the fused \texttt{BCEWithLogitsLoss} formulation, which combines the sigmoid activation and BCE computation into a single operation to prevent overflow and ensure stable gradients. Differentiating with respect to \(z_i\) gives:
+
+\begin{equation}
+\frac{\partial \mathcal{L}_{\text{BCE}}}{\partial z_i} = \sigma(z_i) - a_i = \hat{a}_i - a_i
+\end{equation}
+
+showing that the gradient corresponds directly to the difference between predicted and true probabilities. Denoting \(\hat{\mathbb{A}}\) and \(\mathbb{A}\) as the predicted and true lagged adjacency tensors, respectively, the BCE loss over a mini-batch is computed as:
+
+\begin{equation}
+\mathcal{L}_{\text{BCE}}(\mathbb{A}, \hat{\mathbb{A}}) = -\frac{1}{V^2_{\max} \cdot \ell_{\max}}
+\sum_{i,j=1}^{V_{\max}} \sum_{\ell=1}^{\ell_{\max}}
+\left[
+A_{ij}^{(\ell)} \log \hat{\mathbb{A}}_{ji \ell} + (1 - \mathbb{A}_{ji\ell}) \log (1-\hat{\mathbb{A}}_{ji\ell})
+\right]
+\label{eq:bce-lcm}
+\end{equation}
+
+\subsection{Correlation Regularization} \label{subsec:cr}
+
+In addition to the primary BCE loss, we introduce a correlation-based regularization term designed to guide the model toward statistically plausible edge predictions. The intuition is to incorporate observable signal-level dependencies as auxiliary information, a form of \textit{training aid}, to encourage the model to assign high causal confidence only where empirical evidence supports it.
+
+This \textit{Correlation Regularization} (CR) term penalizes predicted edges between variable pairs whose empirical lagged cross-correlation is low. Following the formulation introduced by \citet{stein2024embracing}, we define:
+
+\begin{equation}
+\mathcal{L}_{\text{CR}}(\hat{\mathbb{A}}, X) = \sum_{i,j=1}^{V_{\max}} \sum_{\ell=1}^{\ell_{\max}}
+\frac{\hat{\mathbb{A}}_{ji\ell}}{\left(|\mathrm{CC}(X_j, X_i, \ell)| + \epsilon\right)^{3/2}}
+\end{equation}
+
+where \(\mathrm{CC}(X_j, X_i, \ell)\) denotes the empirical lagged cross-correlation between variables \(X_j\) and \(X_i\) at lag \(\ell\), computed over the observed time-series segment, and \(\epsilon = 10^{-6}\) ensures numerical stability. The exponent \(3/2\) accentuates the penalty for near-zero correlations while preserving smooth gradients for moderately correlated pairs. In implementation, both the ground truth \(\mathbb{A}\) and the predicted tensor \(\hat{\mathbb{A}}\) are flattened to one-dimensional tensors of length \(V_{\max}^2 \times \ell_{\max}\) before computing the BCE loss. The total loss used for training LCMs thus becomes:
+
+\begin{equation}
+\mathcal{L} = \mathcal{L}_{\text{BCE}} + \lambda_{\text{CR}} \cdot \mathcal{L}_{\text{CR}},
+\end{equation}
+
+where \(\lambda_{\text{CR}}\) is a tunable hyperparameter controlling the strength of the correlation-based penalty. In practice, this term discourages spurious edge predictions and promotes generalization by anchoring causal inference to observable statistical structure. Extensive ablation experiments are performed in Chapter \ref{chap:results} to quantify its effect on model stability and performance.

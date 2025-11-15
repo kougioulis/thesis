@@ -1,0 +1,161 @@
+\section{Training for Prior Knowledge} \label{sec:training-prior}
+
+In many real-world domains, partial knowledge of causal relationships is often available or can be constructed manually by experts. This information can come in the form of known causal edges or paths (i.e. (“\(A\) causes \(B\)”)) or exclusions (“\(A\) does not cause \(B\)”), and may include varying degrees of confidence. Incorporating such domain knowledge into a neural causal discovery model can improve interpretability and robustness, especially under limited data or noisy observational settings. However, unlike constraint-based algorithms such as PCMCI \citep{runge2018causal} which can directly encode hard constraints, neural architectures exhibit intrinsic stochasticity and non-linearity that make strict enforcement of such constraints impractical. 
+
+To address this challenge, we introduce a \textit{soft prior-knowledge regularization} mechanism that complements the supervised edge classification task with an auxiliary stochastic objective. The objective is to gently bias the learning process toward plausible causal structures without rigidly constraining the optimization trajectory. Prior knowledge is injected both at the input level and in the loss function, allowing the model to be gently guided toward known or plausible causal structures without rigidly constraining learning.
+
+\subsection{Random Prior Knowledge Sampling}
+
+Prior knowledge is expressed either as edges (corresponding to paths of length one) or as paths of length \(L \leq \ell_{max}\) in the lagged causal graph \(\mathbb{A} \in \left\{0,1\right\}^{V_{\max} \times V_{\max} \times \ell_{\max}}\) as elaborated in Subsection \ref{subsec:scope-prior}. The ground-truth lagged adjacency tensor is first binarized, such that \(\mathbb{A}_{ji\ell} = 1 \) if a causal edge \(X^i_{t-\ell} \rightarrow X^j_t\) exists, i.e. \(\mathbb{A}_{ji\ell} > 0\) and zero otherwise. From this binary tensor, all directed paths of length up to \(\ell_{\max}\) are extracted via a \textit{depth-first search (DFS)} procedure, implemented in the \textsc{FINDPATHS} algorithm (Algorithm \ref{alg:find-paths}). Essentially, this unrolls the time-lagged causal graph forward in time, enumerating all (acyclic) causal paths of the form \(\pi = \left\{ (u_t,u_{t+1}, \ell_t)\right\}^m_{t=1}, ~m \leq \ell_{\max}\) so that
+
+\begin{equation}
+    \prod_{t=1}^{m} \mathbf{1}[\mathbb{A}_{u_{t+1}, u_t, \ell_t} > 0] > 0
+\end{equation}
+
+Each valid path \(\pi\) is represented by its ordered node sequence, lag indices and its terminal edge \((i,j,\ell)\). These are then used to construct a \textit{prior tensor} \(\mathcal{P} \in \left\{0,1,2\right\}^{V_{\max} \times V_{\max} \times \ell_{\max}}\), encoding prior knowledge as:
+
+\begin{equation}
+\mathcal{P}_{ji\ell} =
+\begin{cases}
+0, & \text{no prior knowledge available},\\
+1, & \text{if edge/path \(X^i_{t-\ell} \rightarrow X^j_t\) is known to exist},\\
+2, & \text{if edge/path \(X^i_{t-\ell} \rightarrow X^j_t\) is known to not exist}
+\end{cases}
+\end{equation}
+
+
+\begin{algorithm}[h!]
+\caption{Path Extraction in Temporal Causal Graph (FINDPATHS)}
+\label{alg:find-paths}
+\begin{algorithmic}[1]
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
+\REQUIRE Lagged adjacency tensor $\mathcal{Y} \in \mathbb{R}^{V \times V \times \ell_{\max}}$, maximum path length $L$
+\ENSURE Set of valid paths $\mathcal{P}$ (each with \texttt{nodes}, \texttt{lags}, and \texttt{last\_edge})
+\STATE Initialize edge map $\texttt{edges} \gets \emptyset$
+\FOR{each $(i,j,k)$ with $\mathcal{Y}[j,i,k] > 0$}
+    \STATE $\ell \gets \ell_{\max} - k$
+    \STATE Append $(j,\ell)$ to $\texttt{edges}[i]$
+\ENDFOR
+\STATE $\texttt{paths} \gets \emptyset$
+\FOR{$s = 1$ to $V$}
+    \STATE $\texttt{stack} \gets [([s], [], 0, 1.0)]$ \COMMENT{Each element: (nodes, lags, depth, strength)}
+    \WHILE{$\texttt{stack}$ not empty}
+        \STATE Pop $(\texttt{nodes}, \texttt{lags}, \texttt{depth}, \texttt{strength})$
+        \STATE $u \gets \texttt{nodes}[-1]$
+        \IF{$u \notin \texttt{edges}$}
+            \STATE \textbf{continue}
+        \ENDIF
+        \FOR{each $(v, \ell) \in \texttt{edges}[u]$}
+            \IF{$v \in \texttt{nodes}$}
+                \STATE \textbf{continue} \COMMENT{Avoid cycles}
+            \ENDIF
+            \STATE $\texttt{new\_nodes} \gets \texttt{nodes} + [v]$
+            \STATE $\texttt{new\_lags} \gets \texttt{lags} + [\ell]$
+            \STATE $\texttt{new\_strength} \gets \texttt{strength} \times \mathbf{1}[\mathcal{Y}[v,u,\ell_{\max}-\ell] > 0]$
+            \IF{$|\texttt{new\_nodes}| \geq 2$ and $\texttt{new\_strength} > 0$}
+                \STATE Append $\{\texttt{nodes}=\texttt{new\_nodes}, \texttt{lags}=\texttt{new\_lags}, \texttt{last\_edge}=(u,v,\ell)\}$ to $\texttt{paths}$
+            \ENDIF
+            \IF{$\texttt{depth} + 1 < L$}
+                \STATE Push $(\texttt{new\_nodes}, \texttt{new\_lags}, \texttt{depth}+1, \texttt{new\_strength})$ onto $\texttt{stack}$
+            \ENDIF
+        \ENDFOR
+    \ENDWHILE
+\ENDFOR
+\RETURN $\texttt{paths}$
+\end{algorithmic}
+\end{algorithm}
+
+
+\subsection{Prior-Weighted Binary Cross Entropy}
+
+During training, both the ground-truth lagged graph \(\mathbb{A}\) and the model's prediction \(\hat{\mathbb{A}}\) are utilized to infer candidate paths, both for sampling prior knowledge from the ground truth as well as for comparing against predicted paths from the model's prediction. These tensors are flattened across variables and lags to form two aligned tensors. A \textit{prior-weighted binary cross-entropy loss} is then defined over the subset of indices where prior knowledge is available, i.e., where \(\mathcal{P}_{ji\ell} \neq 0\), since absence of knowlege is encoded by zeros, including these terms in the loss would prove misleading. To handle the definition and properties of binary cross-entropy (as elaborated in Subsection \ref{subsec:bce}), a remapped \textit{target prior distribution} must be defined as \(p_{\text{target}}(j,i,\ell) = 1\) if \(\mathcal{P}_{ji\ell} = 1\) and \(p_{\text{target}}(j,i,\ell) = 0\) if \(\mathcal{P}_{ji\ell} = 2\). The total prior-weighted loss is then composed of two complementary parts, one for inclusion priors and one for exclusion priors:
+
+\begin{equation}
+    \mathcal{L}_\text{inc} = \sum_{(j,i,\ell): \mathcal{P}_{ji\ell} = 1} b_{ji\ell} \odot \text{BCE}(\hat{\mathbb{P}}_{ji\ell}, 1)
+\end{equation}
+
+\begin{equation}
+    \mathcal{L}_\text{exc} = \sum_{(j,i,\ell): \mathcal{P}_{ji\ell} = 2} b_{ji\ell} \odot \text{BCE}(\hat{\mathbb{P}}_{ji\ell}, 0)
+\end{equation}
+
+where \(\hat{\mathbb{P}}_{ji\ell}\) denotes the corresponding predicted paths based on the output \(\hat{\mathbb{A}}\) of an LCM and \(b_{ji\ell}\) are the corresponding belief strength weights of the belief strength tensor \(\mathcal{B}\). Essentially, a loss between the predicted and true prior path distributions is computed for each valid prior entry. Weighted by the number of valid prior entries \(N_{\text{priors}}\), the prior regularization term becomes
+
+\begin{equation}
+\mathcal{L}_{\text{prior}} = \frac{\lambda_{\text{prior}}}{N_{\text{priors}}} \left(\mathcal{L}_\text{inc} + \mathcal{L}_\text{exc}\right)
+\end{equation}
+
+The term aims to softly enforce causal edges/path inclusions and exclusions, scaled by confidence weights. Consequently, the final loss function of a model trained with prior knowledge combines the base supervised objective, the correlation regularization, and the prior knowledge term, where the last two are scaled by regularization weights \(\lambda_{\text{CR}}\) and \(\lambda_{\text{prior}}\) respectively:
+
+\begin{equation}
+\mathcal{L}_{\text{LCM}} =
+\mathcal{L}_{\text{BCE}}
++ \lambda_{\text{CR}}\mathcal{L}_{\text{corr}}
++ \lambda_{\text{prior}}\mathcal{L}_{\text{prior}}
+\end{equation}
+
+In summary, this formulation allows prior information to be used probabilistically while training rather than deterministically.
+Inclusion priors softly encourage the model to predict higher confidence for known causal connections, weighted by the strength of the prior. Exclusion priors gently penalize unlikely edges, while entries with no prior knowledge are ignored. 
+
+
+\subsection{Staged Curriculum Learning} \label{sec:staged-curriculum-learning}
+
+Curriculum learning \citep{bengio2009curriculum} represents a training paradigm inspired by the way humans learn progressively: starting from simple concepts before tackling more complex ones. Within the ML domain, it has been formalized as a strategy for optimizing non-convex functions by structuring the training process according to sample difficulty. Instead of exposing a model to the full complexity of a dataset from the initial training stages, curriculum learning advocates a staged exposure: the model is first trained on easier, cleaner, or more reliable examples, and only later is it challenged with noisier or harder samples. This gradual shift has been shown to improve optimization stability, convergence to more favorable local minima, and generalization performance across domains such as computer vision, natural language processing, and reinforcement learning.
+
+This effectiveness is often attributed to its ability to allocate computational effort more efficiently: during the early stages, the model avoids being misled by noisy or ambiguous data, allowing it to establish strong inductive biases; later, the controlled introduction of harder examples prevents overfitting to simple patterns and pushes the model toward robustness. From an optimization standpoint, curriculum learning can be interpreted as a form of continuation method that smooths the loss landscape by deforming the training distribution over time.
+
+An important open question regarding both neural-based approaches and foundation models for causal discovery, is an \textit{efficient training regime to incorporate prior knowledge}. Motivated by these insights, we extend the curriculum learning principle to the incorporation of prior knowledge in causal discovery. In particular, we design a staged curriculum that does not merely vary sample difficulty, but instead varies the quality, type, and reliability of prior knowledge provided during training. This aims to provide a principled way to integrate domain knowledge without overwhelming the model early on, while still enforcing robustness to noisy or even misleading priors at later stages.
+
+\begin{figure}[t!]
+    \centering
+    \vspace{0.5em}
+\begin{tikzpicture}[
+  node distance=8mm and 8mm,
+  >=Stealth,
+  every node/.style={font=\sffamily\small, align=center},
+  phase/.style={draw, rounded corners, fill=blue!5, minimum width=16mm, minimum height=12mm, inner sep=4pt}
+]
+
+% Phase 0
+\node[phase] (P0) {\textbf{Phase 0}\\Pretraining\\ $\mathcal{L}_{\text{prior}}=0$};
+
+% Phase 1
+\node[phase, right=of P0] (P1) {\textbf{Phase 1}\\Inclusion priors\\High belief strengths};
+
+% Phase 2
+\node[phase, right=of P1] (P2) {\textbf{Phase 2}\\+Exclusion priors\\High belief strengths};
+
+% Phase 3
+\node[phase, right=of P2] (P3) {\textbf{Phase 3}\\+Noisy priors\\Robustness training};
+
+% Arrows
+\draw[->, thick] (P0) -- (P1);
+\draw[->, thick] (P1) -- (P2);
+\draw[->, thick] (P2) -- (P3);
+
+% Title above
+\node[font=\sffamily\bfseries, 
+      above=10mm of $(P0)!0.5!(P3)$] 
+      {Staged Curriculum Learning Phases};
+
+\end{tikzpicture}
+\vspace{0.5em}
+\caption{Overview of the proposed staged curriculum learning procedure. Training begins in Phase 0 with no prior knowledge, followed by gradually introducing true priors (Phase 1), exclusion priors (Phase 2), and noisy priors (Phase 3). Each stage builds on the model trained in the previous one, under a fine-tuning process, ensuring a smooth transition from data-only, learning to robust prior-informed causal discovery.}
+\label{fig:staged-curriculum}
+\end{figure}
+
+
+Our curriculum learning strategy is organized into four distinct training phases. Each phase is designed to progressively refine the model's ability to leverage prior knowledge under varying belief strengths. For each Phase \(i\), training begins from the pre-trained weights of Phase \(i-1\) (except for Phase 0, where the model is trained from scratch) and is subsequently \textit{fine-tuned}\footnote{In deep learning, \textit{fine-tuning} refers to the process of reusing a pre-trained model and updating a subset of its parameters while keeping the remaining layers fixed. This approach allows adaptation to new data or objectives without overwriting previously learned representations. In our case, only the final feedforward block is unfrozen during fine-tuning.} to incorporate prior information. An overview of this staged process is shown in Figure \ref{fig:staged-curriculum}.
+
+
+\paragraph{Phase 0 - Pretraining (Data-Only Learning).}
+The first stage, which we denote as Phase 0, establishes the foundation of the curriculum. At this point, the model is trained exclusively on the observational and interventional data without any form of prior knowledge. All prior-related inputs, such as prior tensors and belief strengths, are initialized and set to zero, resulting in the prior knowledge loss term vanishing, i.e., \(\mathcal{L}_{\text{prior}} = 0\). This ensures that the model develops a baseline representation and learns to capture causal dependencies solely from the raw data. Importantly, although priors are not yet informative, the model architecture is already adapted to handle the additional input dimensions reserved for priors, thereby avoiding any architectural mismatch when subsequent phases introduce prior information. In this sense, Phase 0 provides a clean initialization point for the following stages.
+
+\paragraph{Phase 1 - Incorporating Inclusion Priors.}
+Once the baseline is established, we gradually expose the model to informative priors in Phase 1. Specifically, we sample a subset of ground-truth causal relations (edges or paths that exist) and inject them into the model as prior signals. These are provided with high belief strengths, drawn from the interval \(\mathcal{B}_{ji\mathcal{l}}\) sampled from \(\mathcal{U}(0.7,1)\), reflecting strong confidence in their correctness. By combining the learned representations from Phase 0 with these informative signals, the model is encouraged to align its predictions with reliable causal structures. To balance the contributions of different objectives, we set the binary cross-entropy edge classification loss coefficient to \(1.0\) and the prior knowledge loss coefficient to \(0.5\). This weighting scheme ensures that while prior knowledge influences training, it does not dominate the optimization, allowing the model to maintain model flexibility.
+
+\paragraph{Phase 2 - Introducing Exclusion Priors.}
+After the model has successfully integrated inclusion priors, Phase 2 introduces exclusion priors, i.e., the absence of certain causal edges. These are likewise injected with high belief strengths \(\mathcal{U}(0.7, 1)\), serving as strong negative examples. From an optimization perspective, this phase provides an additional form of regularization by pruning spurious dependencies the model might otherwise overfit to. The same loss weighting strategy as in Phase 1 is maintained, striking a balance between edge classification accuracy and prior consistency. Taken together, Phases 1 and 2 guide the model through a stage of “structured learning,” where it learns to incorporate both positive and negative causal evidence into its reasoning.
+
+\paragraph{Phase 3 - Robustness to Noisy Priors.}
+The final stage of the curriculum, Phase 3, aims to ensure robustness to imperfect prior knowledge. In practical applications, domain knowledge is often noisy, incomplete, or even contradictory. To prepare the model for such scenarios, we deliberately introduce noisy priors that include both wrong inclusions  and false exclusions, drawn with varying belief strengths. Unlike earlier stages, where priors served primarily as reliable guidance, this phase trains the model to weigh prior information against the data more critically. To avoid model collapse, learning rate is halved during this stage. By exposing the model to uncertainty and potential misinformation, Phase 3 acts as a robustness training stage, preventing overreliance on priors and encouraging adaptive integration of knowledge and evidence. This is particularly important in large-scale causal discovery settings, where domain knowledge may be abundant but not uniformly reliable.

@@ -1,0 +1,33 @@
+\section{Optimization Strategies \& Optimizers} \label{sec:optimizer}
+
+As briefly mentioned in Section \ref{sec:dl}, a neural network model attempts to solve an optimization problem. Broadly speaking, this concerns finding the best possible values of its trainable parameters, over all feasible ones. The optimization problem is typically formulated as a \textit{minimization problem}, where the goal is to find the set of parameters that minimizes a loss function. For a regression task, this means minimizing the expectation of the loss function over the parameters \(\theta\) of a trainable neural model \(f_\theta\), where the expectation is taken with respect to the underlying joint distribution \(p_{X,Y}\) that our input-output training data is assumed to follow. Mathematically, this corresponds to
+
+\begin{equation}
+\theta^{*} = \text{argmin}_{\theta \in \Theta} \mathbb{E}_{(X,Y) \sim p_{X,Y}} \left[\mathcal{L}(f(x;\theta), Y)\right]
+\end{equation}
+ 
+where \(x\) is the input (in our case, the time-series samples) and \(y\) the corresponding label (the ground truth lagged adjacency tensor from the ground truth TSCM), \(\Theta\) the parameter space, \(\theta\) the optimal parameter set and \(\mathcal{L}\) the loss function. Once the expectation is computed, all variables become fixed except for the parameters \(\theta\) of the model. In this sense, only those are left to determine the functions value, which corresponds to the minimization of our quantity of interest. As may be already evident, this problem is \textit{intractable} and is solved by an algorithm that dictates how and when the parameters \(\theta\) are updated over time during training, such that convergence as close as possible to the true minimum is achieved. This role is assigned to the \textit{optimizer} that is used, which is a rigid part of the training protocol.
+
+There are many optimizers to choose from depending on the implemented architecture and nature of the problem. It may even be the case that only one carefully tuned optimizer can adequately train the weights of a specific network. Nonetheless, some optimizers have proven to work well in most circumstances. A treatment of the most common ones is provided in Appendix \ref{app:optimizers}.
+
+\begin{algorithm}[t]
+\caption{AdamW Optimizer} \label{alg:adamw}
+\begin{algorithmic}[1]
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
+\REQUIRE Parameters $\theta$, learning rate $\eta$, $\beta_1, \beta_2 \in [0,1)$, weight decay $\lambda$, $\epsilon > 0$
+\ENSURE Updated parameters $\theta$
+\STATE Initialize $m_0 \gets 0$, $v_0 \gets 0$, $t \gets 0$
+\FOR{each iteration}
+    \STATE $t \gets t+1$
+    \STATE Sample mini-batch and compute gradient $g_t \gets \nabla_\theta \mathcal{L}(\theta)$
+    \STATE $m_t \gets \beta_1 m_{t-1} + (1 - \beta_1) g_t$
+    \STATE $v_t \gets \beta_2 v_{t-1} + (1 - \beta_2) g_t^2$
+    \STATE $\hat{m}_t \gets \frac{m_t}{1 - \beta_1^t}$
+    \STATE $\hat{v}_t \gets \frac{v_t}{1 - \beta_2^t}$
+    \STATE $\theta \gets \theta - \eta \cdot \left(\frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon} + \lambda \theta\right)$
+\ENDFOR
+\end{algorithmic}
+\end{algorithm}
+
+For training our LCMs, we use the Adam optimizer \citep{loshchilov2017fixing} which serves as a popular extension of Adam \citep{kingma2015adam}. AdamW was introduced to fix a subtle but important flaw in Adam regarding weight decay (commonly used for regularization). In classical Adam, weight decay is typically implemented by adding an \(L_2\) penalty term to the loss function. However, this approach causes the penalty to interact with Adam's adaptive learning rate mechanism in unintuitive ways: instead of applying a simple shrinkage to the parameters, the effective weight decay is scaled differently for each parameter depending on its learning rate. This leads to inconsistent and sometimes poor generalization performance. AdamW resolves this by decoupling weight decay from the gradient update rule. In practice, this means that the weight decay term is applied directly to the parameter update rule (line 9 in Algorithm \ref{alg:adamw}), independently of the adaptive gradient correction. The effect is a more consistent and theoretically justified form of regularization. Empirically, AdamW has been shown to improve generalization, especially in large-scale deep learning models such as Transformers and convolutional networks, and it is now the optimizer of choice in many modern architectures, such as in BERT \citep{devlin2019bert}. 
