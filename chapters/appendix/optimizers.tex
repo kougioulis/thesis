@@ -1,0 +1,57 @@
+\chapter{Optimizers} \label{app:optimizers}
+
+This chapter serves as complimentary material to the high level overview of deep learning in Section \ref{sec:dl} for the interested reader, concerning the optimization of deep learning models.
+
+\section*{Stochastic Gradient Descent}
+
+Named after its inherent randomness, \textit{Stochastic Gradient Descent (SGD)} is one of the most well-known optimizers. Many consider it a cardinal pillar of modern artificial intelligence systems, as its core ideas remain highly relevant.  Depending on the specific problem and the input dataset, using the original SGD algorithm as-is can present significant issues. For example, consider an input dataset \(x\) with a substantial amount of highly diverse samples, \(x_d\). Since the gradient update in the original SGD is computed based on a \textit{single drawn sample} per iteration, the gradient computed for these \(x_d\) samples may point in a direction completely opposite to the overall underlying distribution of \(x\). This scenario leads to unstable, highly variant gradients, which consequently implies slower convergence or even failure to converge.
+
+
+  \begin{algorithm}[t]
+  \caption{Mini-Batch Stochastic Gradient Descent (SGD)} \label{alg:sgd}
+  \begin{algorithmic}[1]
+  \renewcommand{\algorithmicrequire}{\textbf{Input:}}
+  \renewcommand{\algorithmicensure}{\textbf{Output:}}
+  \REQUIRE Parameters $\theta$, learning rate $\eta$, batch size $B$, loss function $\mathcal{L}$
+  \ENSURE Updated parameters $\theta$
+  \FOR{each iteration $t = 1, 2, \dots$}
+      \STATE Sample a mini-batch $\{(x^{(i)}, y^{(i)})\}_{i=1}^{B}$
+      \STATE $g_t \gets \frac{1}{B} \sum_{i=1}^{B} \nabla_\theta \mathcal{L}(f(x^{(i)};\theta), y^{(i)})$
+      \STATE $\theta \gets \theta - \eta \, g_t$
+  \ENDFOR
+  \end{algorithmic}
+  \end{algorithm}
+
+\section*{Mini-Batch SGD}
+
+The original SGD method described previously is often unstable because it updates the model's parameters using the gradient from only one sample at a time. To address this, a superior variant called Mini-Batch SGD is typically used. Instead of a single sample, Mini-Batch SGD computes the gradient using a batch of samples in each iteration. This approach offers significant benefits: (i) \textit{stability}, as a batch of samples provides a much more representative estimate of the input data's distribution than a single sample. Consequently, the calculated gradients and the model's overall convergence are much more stable. (ii) \textit{generalization}: Mini-Batch SGD is a generalization of the original SGD; the two are identical when the batch size \(B\) is equal to one. Nevertheless, it is almost always preferable to use a (non-zero) power of two as batch size \footnote{Generally speaking, since memory management in all modern operating systems is organized in powers of two, selecting a power of two for the batch size avoids fetching more pages than needed, therefore improving the algorithm's overall speed.}.
+
+Additionally, when implementing algorithms like this, biases are often omitted from the pseudocode for simplicity. This is because a bias term is mathematically and functionally just another trainable parameter (a weight) in the model. There's no practical need to update or treat biases separately from the other weights.
+
+\section*{Adam Optimizer}
+
+The \textit{Adaptive Moment Estimation (Adam)} optimizer \citep{kingma2015adam} enhances Mini-Batch SGD by incorporating two key momentum variables. A core limitation of standard Mini-Batch SGD is that updates from previous iterations are entirely disregarded when calculating new updates. This can lead to undesirable \textit{oscillations}, where weights are updated consecutively in wildly different directions, thereby impeding convergence. Adam addresses this by introducing the first moment variable, \(\mathbf{m}\), which serves to maintain the momentum gained from previous updates. Adam further improves stability and efficiency using the second moment variable, \(\mathbf{v}\), which provides an \textit{individual learning rate} for every weight in the model. Specifically, contrary to Mini-Batch SGD's fixed learning rate, when a weight receives a relatively large update (i.e., its gradient magnitude is high), its effective learning rate is reduced for subsequent iterations. This mechanism prevents consecutive large updates to the same weights, offering a crucial boost to the optimizer's stability and preventing slow convergence.
+
+
+\begin{algorithm}[t]
+\caption{Adam Optimizer} \label{alg:adam}
+\begin{algorithmic}[1]
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
+\REQUIRE Parameters $\theta$, learning rate $\eta$, $\beta_1, \beta_2 \in [0,1)$, $\epsilon > 0$
+\ENSURE Updated parameters $\theta$
+\STATE Initialize $m_0 \gets 0$, $v_0 \gets 0$, $t \gets 0$
+\FOR{each iteration}
+    \STATE $t \gets t+1$
+    \STATE Sample mini-batch and compute gradient $g_t \gets \nabla_\theta \mathcal{L}(\theta)$
+    \STATE $m_t \gets \beta_1 m_{t-1} + (1 - \beta_1) g_t$ \hfill (First moment)
+    \STATE $v_t \gets \beta_2 v_{t-1} + (1 - \beta_2) g_t^2$ \hfill (Second moment)
+    \STATE $\hat{m}_t \gets \frac{m_t}{1 - \beta_1^t}$ \hfill (Bias correction)
+    \STATE $\hat{v}_t \gets \frac{v_t}{1 - \beta_2^t}$ \hfill (Bias correction)
+    \STATE $\theta \gets \theta - \eta \cdot \frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon}$
+\ENDFOR
+\end{algorithmic}
+\end{algorithm}
+
+The success of Adam stems from its ability to combine the advantages of two prior extensions of Mini-Batch SGD: the \textit{Adaptive Gradient Algorithm (AdaGrad)} \citep{duchi2011adaptive} and \textit{Root Mean Square Propagation (RMSProp)} \citep{tieleman2012lecture}.
+Despite its prevalence, robustness, and efficacy across most tasks, Adam is not universally optimal. There are scenarios where its heightened stability can actually be detrimental, causing it to struggle in finding an adequate minimum or generalizing as well as simpler optimizers like Mini-Batch SGD. For instance, Mini-Batch SGD is known to generalize better for many \textit{Convolutional Neural Networks (CNNs)}, while Adam is often the optimizer of choice for models like \textit{Generative Adversarial Networks (GANs)} \citep{goodfellow2014generative}. Consequently, research continues to be dedicated to finding superior optimization algorithms \citep{chen2023symbolic}.

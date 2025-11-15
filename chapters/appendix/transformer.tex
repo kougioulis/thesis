@@ -1,0 +1,174 @@
+\chapter{The Transformer} \label{app:transformer}
+
+In this section we aim to provide a gentle introduction to the Transformer, as it is used in our LCM architecture, without extensively elaborating on its inner mechanism. Instead, we focus only on the essential components relevant to our LCMs. We refer the reader to \citet{vaswani2017attention} for a more detailed description of the Transformer.
+
+\begin{figure}[t]
+  \centering
+  \begin{tikzpicture}[>=Stealth, node distance=1.5cm]
+
+  % Embedding layer (first row)
+  \node[draw, minimum width=1.2cm, minimum height=0.8cm] (e1) {I};
+  \node[draw, right=of e1, minimum width=1.2cm, minimum height=0.8cm] (e2) {am};
+  \node[draw, right=of e2, minimum width=1.2cm, minimum height=0.8cm] (e3) {a};
+  \node[draw, right=of e3, minimum width=1.2cm, minimum height=0.8cm] (e4) {student};
+
+  % Hidden states row (second row)
+  \node[draw, above=1.2cm of e1, minimum width=1.2cm, minimum height=0.8cm] (h1) {1};
+  \node[draw, right=of h1, minimum width=1.2cm, minimum height=0.8cm] (h2) {2};
+  \node[draw, right=of h2, minimum width=1.2cm, minimum height=0.8cm] (h3) {3};
+  \node[draw, right=of h3, minimum width=1.2cm, minimum height=0.8cm] (h4) {4};
+
+  % Arrows from embeddings to hidden states
+  \draw[->] (e1) -- (h1);
+  \draw[->] (e2) -- (h2);
+  \draw[->] (e3) -- (h3);
+  \draw[->] (e4) -- (h4);
+
+  % Recurrent connections
+  \draw[->] (h1) -- (h2);
+  \draw[->] (h2) -- (h3);
+  \draw[->] (h3) -- (h4);
+
+  % Unrolling arrow
+  \draw[->, thick] ([xshift=-0.7cm,yshift=0.6cm]h1.north west) -- ([xshift=0.7cm,yshift=0.6cm]h4.north east)
+  node[midway, above] {time};
+
+  \end{tikzpicture}
+  \caption{An RNN unrolled over the time space. Rectangles correspond to intermediate states of the RNN. The first row corresponds to the embedding layer.} 
+  \label{fig:rnn}
+\end{figure}
+
+Up to 2017, the main strategy for approaching any NLP task has been with a reccurent neural network. The Transformer paper by \citep{vaswani2017attention} introduced a novel neural architecture addressing many shortcomings of RNN-based models, in the context of machine translation (e.g. translating a sentence from French to English). RNNs have their sequential nature presents issues in parallelization, due to the unfolding of their hidden states. Modern graphical processor units (GPUs) and Tensor Processing Units (TPUs) are capable of parallelizing matrix and tensor operations. For instance, when we compute the product \(A \cdot B\) of \(A \in \mathbb{R}^{n \times k}\) and \(B \in \mathbb{R}^{k \times d}\), many sums and multiplies are not dependent on each other and can be efficiently computed congruently. For an RNN, each hidden state is dependent on the previous state \(h_{t-1}\) in the sequence, which is dependent on \(h_{t-2}\) and so on. Visually, this is depicted in Figure \ref{fig:rnn}. 
+
+Another issue concerning RNNs is the difficulty with which tokens interact with each other relative to their distance.\footnote{This is closely related to the notion of a \textit{receptive field}, i.e., the effective context or span of input elements that can influence the representation at a given position. In RNNs this receptive field grows sequentially, whereas in Transformers it is global and uniform across the sequence.} By interacting we refer to whether the presence of one token in the past affects the processing of another token in a future state. This can make it difficult to learn how distant words should impact the representation of the current word.
+
+Instead, the Transformer entirely replaces the recurrent mechanism with only self-attention operations, which allows for efficient parallelization and processing of the input sequence. The concept of attention however is not new. Essentially, the notion of direct interaction between elements of a sequence in an RNN has already been introduced with context-based neural attention by \citep{bahdanau2014neural}. The Transformer presents an entire replacement for RNNs, revolving just around the concept of self-Attention which solves both parallelization and interaction distance issues. As already discussed, this innovation reduces significant bottlenecks in training large-scale SOTA models, leading to a paradigm shift of using Transformer-based models for foundation models to only for Natural Language Processing but for other domains as well.
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.5\textwidth]{images/app/transformer.png}
+\caption{Illustration of the Transformer Encoder-Decoder architecture by \citet{vaswani2017attention}.}
+\label{fig:transformer}
+\end{figure}
+
+\section*{High-Level Overview}
+
+We begin with a high-level overview of the vanilla Transformer architecture, as introduced in the seminal work of \citet{vaswani2017attention}, originally designed for machine translation. In this section, inputs and outputs are assumed to be sequences of words (not yet multivariate time-series). The architecture follows an \textit{encoder-decoder} structure, with each side consisting of \(N\) identical blocks. In Figure \ref{fig:transformer}, the left part corresponds to the Encoder and the right part to the Decoder. This design replaces the recurrence in RNN/LSTM-based models with purely attention-driven computations, enabling full parallelization during training and more efficient scaling to large datasets.
+
+\subsection*{Embeddings and Positional Encodings}
+
+Let the input sequence be \(F = (w_1, \ldots, w_n)\), where each \(w_i \in \mathcal{V}\), the vocabulary of size \(|\mathcal{V}|\). The first step is to map discrete tokens into continuous representations. Each token \(w_i\) is projected into a dense vector \(u_i \in \mathbb{R}^{d_\text{model}}\) via an \emph{embedding layer}, yielding the matrix representation
+\[
+X = \begin{bmatrix} u_1^\top \\ u_2^\top \\ \vdots \\ u_n^\top \end{bmatrix} \in \mathbb{R}^{n \times d_\text{model}}.
+\]
+
+where \(d_\text{model}\) is the dimensionality of the embeddings and known as the \textit{model dimension}. It is a hyperparameter, tuned by the user, which controls the dimensionality of the representation and as such the capacity of the model. As will be made evident later on, a larger model dimension results in a more complex model with a higher number of learnable parameters. These embeddings may be randomly initialized and learned during training, pre-trained (e.g., word2vec, GloVe), or obtained from more advanced contextual models.
+
+Since there is no dependence of position in the Transformer mechanism, positional information must be injected explicitly. This is achieved by adding \emph{positional encodings} to each embedding. These encodings can be either (i) fixed, such as the original sinusoidal functions which allow extrapolation to unseen sequence lengths, or (ii) learnable, updated during training. Formally, the effective input becomes
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.9\textwidth]{images/app/positional_encodings.png}
+  \caption{Illustration of various sinusoidal positional encodings for \( d_\text{model}=4,5,6,7\) and sequence length \(L=100\).} 
+  \label{fig:pos_encodings}
+\end{figure}
+
+\begin{equation}
+\tilde{u}_i = u_i + p_i, \quad i = 1,\ldots,n,
+\end{equation}
+
+where \(p_i \in \mathbb{R}^{d_\text{model}}\) encodes position \(i\). Unlike recurrent models (RNNs, LSTMs, GRUs), which carry positional information through sequential state updates, Transformers rely entirely on these encodings. An illustration of the positional encodings is shown in Figure \ref{fig:pos_encodings}.
+
+\subsection*{Encoder}
+
+The encoder processes the input sequence through a stack of \(N\) identical blocks. Each block contains: (i) \textit{Multi-Head Self-Attention}, which allows each token to attend to all others in the sequence in parallel, (ii) \textit{Feed-Forward Network (FFN)}, a two-layer position-wise MLP with nonlinearity: \(\text{FFN}(x) = \max(0, xW_1 + b_1) W_2 + b_2 \) and (iii) \textit{Add \& Norm}, consisting of residual connections and layer normalization to stabilize training. The encoder produces a sequence of contextualized representations that encode global dependencies across tokens. Only the final encoder layer output is directly passed to the decoder, though it is used by every decoder block.
+
+\subsection*{Decoder}
+
+The decoder operates analogously to the encoder but with two crucial differences. The target sequence \(E = (e_1, \ldots, e_\ell)\) is first embedded (with a prepended start-of-sequence token $\langle \text{SOS} \rangle$ and shifted right by one position). Each decoder block then contains (i) \textit{Masked Multi-Head Self-Attention}, where a causal mask ensures that position \(i\) can only attend to tokens \(< i\), preventing information leakage from future positions, (ii) \textit{Encoder-Decoder Attention}, a cross-attention mechanism (for which we won't elaborate) that allows the decoder to query encoder outputs, aligning target tokens with the source sequence and (iii) a \textit{Feed-Forward Network (FFN)} with residual and normalization layers as in the encoder.
+
+After passing through the stack of \(N\) decoder blocks, the output logits are transformed by a \textit{final linear projection} (i.e. a feedforward linear layer) and a \textit{softmax} function. The linear projection maps the hidden states into a vector of dimension \(|\mathcal{V}|\), the vocabulary size. The softmax function then converts these scores into probabilities: \[ \text{softmax}(z_i) = \frac{\exp(z_i)}{\sum_{j=1}^{|\mathcal{V}|} \exp(z_j)} \quad \text{for each } i \in \{1, \ldots, |\mathcal{V}|\}, \] where \(z \in \mathbb{R}^{|\mathcal{V}|}\) are the logits produced by the final linear layer.
+
+During training, the entire ground-truth sequence is available, and the model predicts all positions in parallel. During \emph{inference}, however, the decoder generates tokens autoregressively, feeding each predicted token back as input until the end-of-sequence symbol is reached. Decoding can be done greedily or with beam search for better sequence-level optimization.
+
+\subsection*{The Attention Mechanism} \label{sec:attention}
+
+We can now elaborate on the internal mechanism of the Transformer, the \textit{self-Attention} operation. Broadly speaking, it can viewed as a mechanism of taking a query (like in database search), looking-up information in a key-value store by selecting the values of the keys that most likely match the given query. In a sense, by "most likely match" we refer to putting more weight to those that correspond to the keys more like the query, and by "selecting" by averaging over all values. As discussed before, many types of attention exist. The specific type of attention used by the Transformer is known as \textit{Query-Key-Value self-Attention}. The main idea is that each token representation can \textit{attend} to other tokens in the sequence and integrate their collective information. Given an input matrix \(X \in \mathbb{R}^{L \times d_\text{model}}\) (with \(L\) tokens and model dimension \(d_\text{model}\)), the query, key and value projections are computed: 
+
+\begin{equation}
+  Q = XW_Q, \quad K = XW_K, \quad V = XW_V
+\end{equation}
+
+where \(W_Q, W_K, W_V \in \mathbb{R}^{d_\text{model} \times d}\) are learnable weight matrices for the query, key, and value projections. Often it is assumed that \(d = d_K = d_V = d_Q\). Now consider a token \(\mathbf{x}_i\) in the sequence \(x_{1:n}\). The contextual representation \(\mathbf{h}_i\) of \(\mathbf{x}_i\) is the weighted sum of the values of the sequence \( \mathbf{h}_i = \sum_{j=1}^{n}\alpha_{ij}\mathbf{v}_j \), where the weights \(\alpha_{ij}\) control the strength of each value \(\mathbf{v}_j\). The weights are obtained by computing the affinities between the keys and the query, which is the inner product \(q^T_i k_j\) and then taking the softmax to obtain probablities: 
+
+\begin{equation}
+  \alpha_{ij} = \frac{\exp(q^T_i k_j)}{\sum_{j=1}^{n} \exp(q^T_i k_j)}
+\end{equation}
+
+Regarding complexity, computing the attention scores involves the inner product \(QK^\top \in \mathbb{R}^{L \times L}\) which costs \(\mathcal{O}(L^2)\) in time and requires \( \mathcal{O}(L^2)\) space for storing the pairwise similarities. Multiplying the score matrix with the values matrix \(V\) adds another \(\mathcal{O}(L^2 d)\). A novelty by \citet{vaswani2017attention} is the scaling of the product with respect to the square root of the dimensionality of the keys \(d_k\), resulting in the \textit{scaled dot-product attention}: 
+
+\begin{equation}
+  \text{Attention}(Q, K, V) = \text{softmax}(\left(\frac{Q K^\top}{\sqrt{d_k}}\right)) V
+\end{equation}
+
+where \(d_k\) is the dimension of keys. The intuition is that when the dimensionality \(d_k\) of the dotted vectors grows large, the dot product of even random vectors (as during initialization) scales roughly as \( \sqrt{d_k}\).
+
+Each row of the resulting matrix is a weighted average of the values, where weights are determined by the similarity between queries and keys. The scaling by \(\sqrt{d_k}\) prevents large dot products from destabilizing gradients. Note that for the algebra to work out, the number of keys and values n must be equal, but the number of queries m can vary.
+
+\subsection*{Multi-Head Attention}
+
+Intuitively, a single self-attention operation is best at picking out a single value (on average) from the input value set. It does so softly, by averaging over all of the values, but it requires a balancing game in the key-query dot products in order to carefully average two or more things. Instead of performing a single attention operation, the Transformer uses \(h\) \textit{independent attention heads} to capture multiple types of relationships i parallel, which applies self-attention multiple times with different query, key and value transformations on the same input, with the outputs concatenated and projected back:
+
+\begin{equation}
+\text{MultiHead}(Q, K, V) = \text{Concat}(\text{head}_1,\ldots,\text{head}_h)W^O,
+\end{equation}
+
+where \(\text{head}_i = \text{Attention}(QW^Q_i, KW^K_i, VW^V_i)\).
+
+This design allows the model to represent diverse dependencies (syntactic, semantic, positional) simultaneously. While the theoretical cost is \(\mathcal{O}(L^2 d_\text{model})\) in both time and space, optimized implementations (e.g., FlashAttention) can reduce memory usage to \(\mathcal{O}(L d_\text{model})\), improving scalability, but remaining outside the scope of our work.
+
+\subsection*{Layer Normalization}
+
+Layer normalization \citep{ba2016layer} is crucial for stabilizing training. For token \(h_i \in \mathbb{R}^d\), statistics are computed across the hidden dimension:
+
+\begin{equation}
+\hat{\mu}_i = \frac{1}{d}\sum_{j=1}^d h_{ij}, \quad \hat{\sigma}_i^2 = \frac{1}{d}\sum_{j=1}^d (h_{ij} - \hat{\mu}_i)^2,
+\end{equation}
+
+and the normalized output is
+
+\begin{equation}
+\text{LayerNorm}(h_i) = \frac{h_i - \hat{\mu}_i}{\sqrt{\hat{\sigma}_i^2 + \epsilon}} \cdot \gamma + \beta,
+\end{equation}
+
+with learnable scale and bias parameters \(\gamma,\beta \in \mathbb{R}^d\).
+
+\subsection*{Residual Connections}
+
+Residual connections \citep{he2016deep} alleviate vanishing gradients and ease optimization in deep architectures. Formally,
+
+\begin{equation}
+\text{Residual}(x) = x + \text{Layer}(x).
+\end{equation}
+
+The Transformer uses a combination of residual connections and normalization, known as \emph{Add \& Norm}. Two main variants exist:
+
+\begin{equation}
+h = \text{LayerNorm}(x + \text{Layer}(x)) \quad \text{(post-norm)},
+\end{equation}
+
+\begin{equation}
+h = x + \text{LayerNorm}(\text{Layer}(x)) \quad \text{(pre-norm)}.
+\end{equation}
+
+Empirically, pre-norm architectures exhibit better gradient flow and faster convergence in very deep Transformers \citep{xiong2020layer}.
+
+\subsection*{Dropout Layers}
+
+Dropout \citep{srivastava2014dropout} is a regularization technique designed to mitigate overfitting in neural networks by randomly deactivating a subset of neurons during training. At each iteration, a binary mask \( m \sim \text{Bernoulli}(p) \) is sampled where \(p\) denotes the probability of retaining a unit. The layer output is then given by
+
+\begin{equation}
+  \text{Dropout}(x) = m \odot x,
+\end{equation}
+
+where \(\odot\) denotes element-wise multiplication. During inference, dropout is typically disabled, and activations are scaled by the retention probability p to preserve the expected activation magnitude. In Transformer models, dropout is commonly applied to several components: (i) the outputs of attention weights before the residual addition, (ii) the outputs of feed-forward sublayers, and (iii) the input embeddings. Studies by \citet{zhai2022scaling} have shown that dropout contributes significantly to generalization in large-scale sequence models, particularly when combined with normalization and residual connections.

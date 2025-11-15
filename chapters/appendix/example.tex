@@ -1,0 +1,33 @@
+chapter{Illustrative Example} \label{app:illustrative_example}
+
+To provide an intuitive demonstration of our LCMs, we construct a synthetic temporal causal process consisting of three variables \(V^1, V^2\) and \(V_3\). The example is governed by a simple temporal structural causal model:
+
+\[
+V^1_t := \epsilon_1(t), \quad 
+V^2_t := 3 V^1_{t-1} + \epsilon^2_t, \quad 
+V^3_t := V^2_{t-2} + 5 V^1_{t-3} + \epsilon^3_t,
+\]
+
+where \(\epsilon^i_t \sim \mathcal{N}(0,1) ~ \forall i \in \{1,2,3\}, t \in \mathbb{Z}\). This induces the following lagged causal relationships:
+
+\[
+V^1 \xrightarrow[\text{lag}=1]{} V^2, \quad 
+V^1 \xrightarrow[\text{lag}=3]{} V^3, \quad 
+V^2 \xrightarrow[\text{lag}=2]{} V^3
+\]
+
+The function \texttt{run\_illustrative\_example} generates \(500\) synthetic time series data and the corresponding ground-truth lagged adjacency tensor. We then feed this data through the \texttt{9.4M} LCM model. The predicted lagged adjacency tensor is visualized in Figure \ref{app:lagged_adjacency_tensor}, while the corresponding true and predicted lagged causal graphs, tresholded at \(tau=0.05\), are shown in Figure \ref{app:lagged_causal_graph}. As expected, the model successfully captures the underlying causal structure of this simple temporal dataset.
+
+\begin{sidewaysfigure}[h!]
+\centering
+\includegraphics[width=0.9\textwidth]{images/example/lagged_adjacency_tensor.png}
+\caption{Predicted (non-thresholded) lagged adjacency tensor \(\hat{\mathbb{A}_{i,j,\ell}}\) by the \texttt{9.4}M LCM on the illustrative example.}
+\label{app:lagged_adjacency_tensor}
+\end{sidewaysfigure}
+
+\begin{sidewaysfigure}
+  \centering
+  \includegraphics[width=0.9\textwidth]{images/example/lagged_causal_graphs.png}
+  \caption{Ground truth (left) and predicted (right) lagged causal graphs on the \texttt{9.4M} LCM on the illustrative example.}
+  \label{app:lagged_causal_graph}
+\end{sidewaysfigure}
