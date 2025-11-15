@@ -10,7 +10,6 @@ A more useful way to assess data similarity is using \textit{Classifier 2-sample
 
 To highlight our contributions in realistic data generation, we present key arguments against the suitability of the work by \citet{cheng2024causaltime} for training and evaluating our LCMs. It remains the closest to our work, in the sense that it is applicable to time-series and has been introduced as a method to benchmark causal discovery algorithms. However, it faces several shortcomings. It begins by fitting a residual-based neural network (\textit{causally disentangled neural network - CDNN}), based on either an MLP or an LSTM architecture, to model a \textit{vector autoRegressive (VAR)} process, using all historical variables for a specified maximum lag; it then extracts a \textit{hypothetical causal graph (HCG)} based on computed feature importance values, using methods such as deep Shapley additive exPlanations (DeepSHAP) \citep{lundberg2017unified}, while being able to generate data auto-regressively from the fitted model. As the authors themselves point out throughout their paper, the extracted HCG using feature importance does not constitute causal discovery and does not represent a causal model. As such, causal queries are not possible and the discovered graph does not represent a causal digital twin. As their extracted hypothetical causal graph represents a \textit{summary graph} with no lag information and not a \textit{lagged causal graph} (Figure \ref{fig:temporal-graphs}), its scope remains limited. Additionally, although a generative mechanism for data exists by the fitted model, it does not reflect or approximate the underlying TSCM mechanism. Consequently, generation of interventional samples is unfeasible: the resulting process may generate temporally correlated samples, but not reason causally, e.g. to estimate \(P(Y|\text{do}(X=x))\). 
 
-
 \begin{figure}[ht!]
     \centering
     \begin{minipage}[t]{0.32\textwidth}
@@ -67,31 +66,6 @@ We now describe the generation of TSCMs with some mathematical rigor. Given a mu
 \end{equation}
 
 It is crucial to highlight that the outcome of all the considered time-series CD methods are \textit{lagged causal graphs}, that not only serve as an expressive representation of the causal model for training our LCMs, but also able to preserve the temporal structure of data for further use. We describe TCS in Algorithm \ref{alg:tcs}. It should also be noted that as causal discovery algorithms are governed by a set of causal assumptions, sampled data from TCS, as well as input data to the method, are assumed to follow these assumptions. The algorithms and their assumptions are selected to align with the causal assumptions of our LCMs, in Chapter \ref{chap:architecture}. 
-
-%\begin{algorithm}[t]
-%\caption{Temporal Causal-Based Simulation (TCS-SIMULATE)}
-%\label{alg:tcs}
-%\begin{algorithmic}[1]
-%\REQUIRE Real dataset $\mathcal{D} = \{\mathbf{X}_t\}_{t=1}^{T}$ over variables $\mathbf{V}$; 
-%         sample size $n$; 
-%         causal discovery configs $\{\mathbf{B}_{CD}\}$; 
-%         functional estimator configs $\{\mathbf{B}_{pred}\}$; 
-%         noise configs $\{\mathbf{B}_{noise}\}$; 
-%         ACT parameters $(\mathcal{D}_{disc}, \{C_d\}, \alpha, n_{perm})$
-%\ENSURE Optimal causal model $s_{\text{best}}$, generated dataset $\mathcal{D}'_{s_{\text{best}}}$, and discriminator score $\mathrm{AUC}_{\text{best}}$
-%\STATE $\mathcal{S} \gets \text{GENERATE\_TSCM\_CONFIGS}(\{\mathbf{B}_{CD}\}, \{\mathbf{B}_{pred}\}, \{\mathbf{B}_{noise}\})$
-%\FOR{each configuration $s \in \mathcal{S}$}
-%    \STATE $(\mathcal{G}_s, \mathbf{Pa}_s) \gets \text{CAUSAL\_DISCOVERY}(\mathcal{D}, \mathbf{b}_{CD})$
-%    \FOR{each variable $X^i \in \mathbf{V}$}
-%        \STATE $f_{X^i} \gets \text{FIT\_FUNCTION}(X^i, \mathbf{Pa}_{X^i}, \mathbf{b}_{pred})$
-%        \STATE $\epsilon^i \gets \text{FIT\_NOISE}(X^i - f_{X^i}(\mathbf{Pa}_{X^i}), \mathbf{b}_{noise})$
-%    \ENDFOR
-%    \STATE $\mathcal{D}'_s \gets \text{ANCESTRAL\_SAMPLE}(\mathcal{G}_s, \{f_{X^i}\}, \{\epsilon^i\}, n, T)$
-%\ENDFOR
-%\STATE $(s_{\text{best}}, \mathrm{AUC}_{\text{best}}) \gets \text{ACT}(\mathcal{S}, \mathcal{D}, \mathcal{D}_{disc}, \{C_d\}, \alpha, n_{perm})$
-%\RETURN $s_{\text{best}}, \mathcal{D}'_{s_{\text{best}}}, \mathrm{AUC}_{\text{best}}$
-%\end{algorithmic}
-%\end{algorithm}
 
 \begin{algorithm}[t]
 \caption{Temporal Causal-Based Simulation (TCS-SIMULATE)}
@@ -238,45 +212,6 @@ By running this process for each candidate causal model, we thus avoid underfit 
 
 In the end, TCS returns the configuration of the optimal temporal causal model, along with the discrimination score and the optimized configuration of the discriminator. This is shown in Figure \ref{fig:pipeline-part-b}, and in pseudocode form in Algorithm \ref{alg:act}.  The considered hyperparameter search spaces for the classifiers (adversarial space) are shown in Table \ref{tab:search-spaces}.
 
-%\begin{algorithm}[t]
-%\caption{Adversarial Causal Tuning (ACT)}
-%\label{alg:act}
-%\begin{algorithmic}[1]
-%\renewcommand{\algorithmicrequire}{\textbf{Input:}}
-%\renewcommand{\algorithmicensure}{\textbf{Output:}}
-%\REQUIRE Candidate TCS configurations $S = \{s_1, \dots, s_m\}$; real test set $\mathcal{D}_{real}$; discriminator space $D$; discriminator configuration grids $\{C_d\}_{d \in D}$; significance level $\alpha$; number of permutations $n$
-%\ENSURE Optimal TCS configuration $s_{\text{best}}$, associated discriminator $d_{\text{best}}$, configuration $c_{\text{best}}$, and discrimination score $\mathrm{AUC}_{\text{best}}$
-%\STATE $\mathcal{R} \gets \emptyset$ \COMMENT{Store best discriminator result for each TCS configuration}
-%\FOR{each configuration $s \in S$}
-%    \STATE $\mathcal{D}_s \gets \text{SIMULATE}(s)$ \COMMENT{Generate dataset via TCS}
-%    \STATE $\mathrm{AUC}^s_{\text{best}} \gets -\infty$, $\text{Disc}^s_{\text{best}} \gets \text{None}$, $\text{Cfg}^s_{\text{best}} \gets \text{None}$
-%    \FOR{each discriminator $d \in D$}
-%        \FOR{each configuration $c \in C_d$}
-%            \STATE $\mathrm{AUC}^{c}_{d} \gets \text{TRAIN\_EVAL}(d, c, \mathcal{D}_{real}, \mathcal{D}_s)$
-%            \IF{$\mathrm{AUC}^{c}_{d} > \mathrm{AUC}^s_{\text{best}}$}
-%                \STATE $\mathrm{AUC}^s_{\text{best}} \gets \mathrm{AUC}^{c}_{d}$
-%                \STATE $\text{Disc}^s_{\text{best}} \gets d$
-%                \STATE $\text{Cfg}^s_{\text{best}} \gets c$
-%            \ENDIF
-%        \ENDFOR
-%    \ENDFOR
-%    \STATE $\mathcal{R} \gets \mathcal{R} \cup \{(s, \mathrm{AUC}^s_{\text{best}}, \text{Disc}^s_{\text{best}}, \text{Cfg}^s_{\text{best}})\}$
-%\ENDFOR
-%\STATE Select configuration $s_o \in \mathcal{R}$ with the lowest $\mathrm{AUC}^s_{\text{best}}$
-%\STATE Retrieve associated $\text{Disc}_o, \text{Cfg}_o, \mathrm{AUC}_o$
-%\STATE $\mathcal{E} \gets \{s_o\}$ \COMMENT{Set of statistically equivalent configurations}
-%\FOR{each configuration $s \in \mathcal{R} \setminus \{s_o\}$}
-%    \STATE Obtain $probs_o, probs_s, \mathrm{AUC}_o, \mathrm{AUC}_s$ from their discriminators
-%    \STATE $p \gets \text{PERM\_TEST}(y_{\text{test}}, probs_o, probs_s, \mathrm{AUC}_o, \mathrm{AUC}_s, \alpha, n)$
-%    \IF{$p \ge \alpha$}
-%        \STATE $\mathcal{E} \gets \mathcal{E} \cup \{s\}$ \COMMENT{Add statistically equivalent configuration}
-%    \ENDIF
-%\ENDFOR
-%\STATE $s_{\text{best}} \gets$ configuration in $\mathcal{E}$ with fewest edges in its causal graph
-%\RETURN $s_{\text{best}}, \mathrm{AUC}^{s_{\text{best}}}_{\text{best}}$
-%\end{algorithmic}
-%\end{algorithm}
-
 \begin{algorithm}[t]
 \caption{Adversarial Causal Tuning (ACT)}
 \label{alg:act}
@@ -320,34 +255,6 @@ In the end, TCS returns the configuration of the optimal temporal causal model, 
 \subsubsection{Sparsity Penalty}
 
 A drawback of the proposed method is that it may occasionally favor dense graph outputs to more realistic candidate solutions of phase 1, being statistically beneficial during the next phases. To avoid this, we adopt a \textit{sparsity penalty strategy} following \citet{biza2022oct}. Specifically, a permutation-based statistical hypothesis test is introduced on whether two classifiers have statistically equivalent scores. The permutation test assumes as null-hypothesis that two given classifiers have statistically equivalent \(\mathrm{AUC}_D\) scores and uses as its statistic the difference between these two discriminative scores. At its core, the permutation test swaps the per sample predicted probabilities of two classifiers and then re-calculates and compares the permuted outcomes to the ground-truth. If the \(p-\text{value}\) computed by the permutation test is larger than the significance level \(\alpha\), then the comparing \(\mathrm{AUC}_D\)s are considered equivalent. By default, a significance level of \(\alpha=0.05\) and 1000 permutations is used to compute the \(p-\text{value}\). It should be noted that no significant computational overhead is introduced with sparsity penalty, as the only operations performed is the swapping of predictions and the calculation of the permuted \(\mathrm{AUC}_D\) scores. Detailed steps are described in Algorithm \ref{alg:statistical-equivalence-test}. Through this, candidate causal models from the TSCM search space that are statistically equivalent to the best-performing one are filtered. All such candidate models are compared against their sparsity, with the sparsest one being selected, thus avoid the problem of favoring the trivial solution of dense graphs during the search for the optimal causal model.
-
-%\begin{algorithm}[t]
-%\caption{AUC Statistical Equivalence Test (PERM\_TEST)} \label{alg:statistical-equivalence-test}
-%\begin{algorithmic}[1]
-%\renewcommand{\algorithmicrequire}{\textbf{Input:}}
-%\renewcommand{\algorithmicensure}{\textbf{Output:}}
-%\REQUIRE Test set labels $y_{\text{test}}$; discriminator test predicted probabilities on the optimal TSCM output $probs_{o}$; discriminator test predicted probabilities on a candidate TSCM output $probs_{i}$; discrimination scores $\mathrm{AUC}_o$ and $\mathrm{AUC}_i$; significance level $\alpha$; number of permutations $n$
-%\ENSURE \textit{True} or \textit{False} for statistical equivalence
-%\STATE $t_{obs} \gets |\mathrm{AUC}_{o} - \mathrm{AUC}_{i}|$
-%\STATE $ctr \gets 0$
-%\FOR{$p = 1$ to $n$}
-%    \STATE $w^{p}_{l} \gets \text{SAMPLE\_PERMUTATION\_INDICES()}$ \COMMENT{Sample indices to swap uniformly}
-%    \STATE $(probs^{o}_{w}, probs^{i}_{w}) \gets \text{SWAP}(probs_{o}, probs_{i}, w^{p}_{l})$ \COMMENT{Permute sampled indices}
-%    \STATE $\mathrm{AUC}_{o}^{w} \gets \text{EVALUATE}(y_{\text{test}}, probs^{o}_{w})$ \COMMENT{Permuted AUC for optimal TSCM}
-%    \STATE $\mathrm{AUC}_{i}^{w} \gets \text{EVALUATE}(y_{\text{test}}, probs^{i}_{w})$ \COMMENT{Permuted AUC for candidate TSCM}
-%    \STATE $t_{p} \gets |\mathrm{AUC}_{o}^{w} - \mathrm{AUC}_{i}^{w}|$
-%    \IF{$t_{p} > t_{obs}$}
-%        \STATE $ctr \gets ctr + 1$
-%    \ENDIF
-%\ENDFOR
-%\STATE $pvalue \gets \frac{ctr}{n}$
-%\IF{$pvalue \ge \alpha$}
-%    \STATE \textbf{return} True
-%\ELSE
-%    \STATE \textbf{return} False
-%\ENDIF
-%\end{algorithmic}
-%\end{algorithm}
 
 \begin{algorithm}[t]
 \caption{AUC Statistical Equivalence Test (PERM\_TEST)}
