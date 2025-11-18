@@ -123,10 +123,10 @@ An important open question regarding both neural-based approaches and foundation
 \node[phase, right=of P0] (P1) {\textbf{Phase 1}\\Inclusion priors\\High belief strengths};
 
 % Phase 2
-\node[phase, right=of P1] (P2) {\textbf{Phase 2}\\+Exclusion priors\\High belief strengths};
+\node[phase, right=of P1] (P2) {\textbf{Phase 2}\\Exclusion priors\\High belief strengths};
 
 % Phase 3
-\node[phase, right=of P2] (P3) {\textbf{Phase 3}\\+Noisy priors\\Robustness training};
+\node[phase, right=of P2] (P3) {\textbf{Phase 3}\\Noisy priors\\Robustness training};
 
 % Arrows
 \draw[->, thick] (P0) -- (P1);
@@ -144,9 +144,7 @@ An important open question regarding both neural-based approaches and foundation
 \label{fig:staged-curriculum}
 \end{figure}
 
-
 Our curriculum learning strategy is organized into four distinct training phases. Each phase is designed to progressively refine the model's ability to leverage prior knowledge under varying belief strengths. For each Phase \(i\), training begins from the pre-trained weights of Phase \(i-1\) (except for Phase 0, where the model is trained from scratch) and is subsequently \textit{fine-tuned}\footnote{In deep learning, \textit{fine-tuning} refers to the process of reusing a pre-trained model and updating a subset of its parameters while keeping the remaining layers fixed. This approach allows adaptation to new data or objectives without overwriting previously learned representations. In our case, only the final feedforward block is unfrozen during fine-tuning.} to incorporate prior information. An overview of this staged process is shown in Figure \ref{fig:staged-curriculum}.
-
 
 \paragraph{Phase 0 - Pretraining (Data-Only Learning).}
 The first stage, which we denote as Phase 0, establishes the foundation of the curriculum. At this point, the model is trained exclusively on the observational and interventional data without any form of prior knowledge. All prior-related inputs, such as prior tensors and belief strengths, are initialized and set to zero, resulting in the prior knowledge loss term vanishing, i.e., \(\mathcal{L}_{\text{prior}} = 0\). This ensures that the model develops a baseline representation and learns to capture causal dependencies solely from the raw data. Importantly, although priors are not yet informative, the model architecture is already adapted to handle the additional input dimensions reserved for priors, thereby avoiding any architectural mismatch when subsequent phases introduce prior information. In this sense, Phase 0 provides a clean initialization point for the following stages.
@@ -155,7 +153,7 @@ The first stage, which we denote as Phase 0, establishes the foundation of the c
 Once the baseline is established, we gradually expose the model to informative priors in Phase 1. Specifically, we sample a subset of ground-truth causal relations (edges or paths that exist) and inject them into the model as prior signals. These are provided with high belief strengths, drawn from the interval \(\mathcal{B}_{ji\mathcal{l}}\) sampled from \(\mathcal{U}(0.7,1)\), reflecting strong confidence in their correctness. By combining the learned representations from Phase 0 with these informative signals, the model is encouraged to align its predictions with reliable causal structures. To balance the contributions of different objectives, we set the binary cross-entropy edge classification loss coefficient to \(1.0\) and the prior knowledge loss coefficient to \(0.5\). This weighting scheme ensures that while prior knowledge influences training, it does not dominate the optimization, allowing the model to maintain model flexibility.
 
 \paragraph{Phase 2 - Introducing Exclusion Priors.}
-After the model has successfully integrated inclusion priors, Phase 2 introduces exclusion priors, i.e., the absence of certain causal edges. These are likewise injected with high belief strengths \(\mathcal{U}(0.7, 1)\), serving as strong negative examples. From an optimization perspective, this phase provides an additional form of regularization by pruning spurious dependencies the model might otherwise overfit to. The same loss weighting strategy as in Phase 1 is maintained, striking a balance between edge classification accuracy and prior consistency. Taken together, Phases 1 and 2 guide the model through a stage of “structured learning,” where it learns to incorporate both positive and negative causal evidence into its reasoning.
+After the model has successfully integrated inclusion priors, Phase 2 introduces exclusion priors, i.e., the absence of certain causal paths/edges. These are likewise injected with high belief strengths \(\mathcal{U}(0.7, 1)\), serving as strong negative examples. From an optimization perspective, this phase provides an additional form of regularization by pruning spurious dependencies the model might otherwise overfit to. The same loss weighting strategy as in Phase 1 is maintained, striking a balance between edge classification accuracy and prior consistency. Taken together, Phases 1 and 2 guide the model through a stage of “structured learning,” where it learns to incorporate both positive and negative causal evidence into its reasoning.
 
 \paragraph{Phase 3 - Robustness to Noisy Priors.}
 The final stage of the curriculum, Phase 3, aims to ensure robustness to imperfect prior knowledge. In practical applications, domain knowledge is often noisy, incomplete, or even contradictory. To prepare the model for such scenarios, we deliberately introduce noisy priors that include both wrong inclusions  and false exclusions, drawn with varying belief strengths. Unlike earlier stages, where priors served primarily as reliable guidance, this phase trains the model to weigh prior information against the data more critically. To avoid model collapse, learning rate is halved during this stage. By exposing the model to uncertainty and potential misinformation, Phase 3 acts as a robustness training stage, preventing overreliance on priors and encouraging adaptive integration of knowledge and evidence. This is particularly important in large-scale causal discovery settings, where domain knowledge may be abundant but not uniformly reliable.
