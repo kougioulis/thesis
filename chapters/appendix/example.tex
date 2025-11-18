@@ -16,7 +16,7 @@ V^1 \xrightarrow[\text{lag}=3]{} V^3, \quad
 V^2 \xrightarrow[\text{lag}=2]{} V^3
 \]
 
-The function \texttt{run\_illustrative\_example} generates \(500\) synthetic time series data and the corresponding ground-truth lagged adjacency tensor. We then feed this data through the \texttt{9.4M} LCM model. The predicted lagged adjacency tensor is visualized in Figure \ref{app:lagged_adjacency_tensor}, while the corresponding true and predicted lagged causal graphs, tresholded at \(tau=0.05\), are shown in Figure \ref{app:lagged_causal_graph}. As expected, the model successfully captures the underlying causal structure of this simple temporal dataset.
+The function \texttt{run\_illustrative\_example} generates \(500\) synthetic time series data and the corresponding ground-truth lagged adjacency tensor. We then feed this data through the \texttt{9.4M} LCM model. The predicted lagged adjacency tensor is visualized in Figure \ref{app:lagged_adjacency_tensor}, while the corresponding true and predicted lagged causal graphs, tresholded at \(\tau=0.05\), are shown in Figure \ref{app:lagged_causal_graph}. As expected, the model successfully captures the underlying causal structure of this simple temporal dataset.
 
 \begin{sidewaysfigure}[h!]
 \centering
