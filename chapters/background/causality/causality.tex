@@ -49,7 +49,7 @@ X_3 = f_3(X_1,\, \epsilon_3)
 
 \section{The Temporal Setup} \label{sec:temp-scms}
 
-The case for time-series data can be viewed as a natural generalization of the above, but taking into account the additional temporal dimension of data. Let \( \left\{ \mathbf{V}_t \right\}_{t \in \mathbb{Z}} \) denote a multivariate stochastic process, with \(V_t=(V^1_t,\ldots,V^N_t)\) representing the state of the system at time \(t\). A \textit{Temporal Structural Causal Model (TSCM)} consists of the structural assignments
+The case for time-series data can be viewed as a natural generalization of the above, but taking into account the additional temporal dimension of data. Let \( \left\{ \mathbf{V}_t \right\}_{t \in \mathbb{Z}} \) denote a multivariate stochastic process, with \(V_t=(V^1_t,\ldots,V^N_t)\) representing the state of the system at time \(t\). A \textit{Temporal Structural Causal Model (TSCM)} \citep{runge2018causal} consists of the structural assignments
 
 \begin{equation} \label{eq:scm}
 V^j_t \;:=\; f_j\bigl(\text{Pa}(V^j_t),\,\epsilon^j_t\bigr), ~\quad j=1,\dots,N,\;\;t\in\mathbb{Z},
@@ -205,7 +205,7 @@ Essentially, a summary graph is a simplified representation of the lagged causal
 
 \section{Probabilistic Quantifications} \label{sec:bns}
 
-To introduce our next causal assumptions, one needs to understand how causal structures relate to probabilistic reasoning, by the formalism of \textit{Bayesian networks (BNs)}. BNs provide a compact representation of a joint probability distribution using a directed acyclic graph. Each node corresponds to a random variable, and each directed edge represents a statistical dependence.
+To introduce our next causal assumptions, one needs to understand how causal structures relate to probabilistic reasoning, by the formalism of \textit{Bayesian networks (BNs)} \citep{pearl1988probabilistic}. BNs provide a compact representation of a joint probability distribution using a directed acyclic graph. Each node corresponds to a random variable, and each directed edge represents a statistical dependence.
 
 Briefly, a Bayesian network is defined as a pair \((\mathcal{G}, \mathbb{P})\), where \(\mathcal{G} = (\mathbf{V}, \mathbb{P})\) is a DAG with nodes \(\mathbf{V} = \{X_1, \dots, X_n\}\), and \(\mathbb{P}\) is a joint distribution over \(\mathbf{V}\), which factorizes, according to the chain rule, based on the structure of \(\mathcal{G}\). That is, each variable \(X_i\) is conditionally independent of its non-descendants given its parents \(\mathrm{Pa}(X_i)\) in the graph:
 
