@@ -319,7 +319,7 @@ where \(\mathrm{Linear}_1 : \mathbb{R}^{d_{\text{in}}} \rightarrow \mathbb{R}^{d
 \hat{\mathbb{A}} \;=\; \sigma\left( \mathrm{Reshape}\!\big(h_2\big) \right) \in [0,1]^{V_{\max} \times V_{\max} \times \ell_{\max}}
 \end{equation}
 
-where \(\sigma(x) = (1 + e^{-x})^{-1}\) is the sigmoid transformation and each element \(\hat{\mathbb{A}}_{ij\tau}\) represents the confidence of the model that a directed edge \(X^i_{t-\tau} \rightarrow X^j_t\) exists. The final sigmoid activation converts logits into interpretable probabilities of causal edge existence.
+where \(\sigma(x) = (1 + e^{-x})^{-1}\) is the sigmoid transformation and each element \(\hat{\mathbb{A}}_{ji\tau}\) represents the confidence of the model that a directed edge \(X^i_{t-\tau} \rightarrow X^j_t\) exists. The final sigmoid activation converts logits into interpretable probabilities of causal edge existence.
 
 The cautious reader should notice that instead of a softmax to convert the final logits into probabilities (as in the vanilla transformer), a sigmoid is used. A sigmoid is appropriate for \textit{binary} or \textit{multi-label classification} problems where each output can be viewed as an independent Bernoulli event, while softmax is appropriate for multi-class classification where only one class is active at a time.
 
