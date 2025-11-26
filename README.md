@@ -3,7 +3,7 @@
 [cc-by]: http://creativecommons.org/licenses/by/4.0/
 [cc-by-shield]: https://img.shields.io/badge/License-CC%20BY%204.0-lightgrey.svg
 
-This repository contains the LaTeX source code of my MSc Thesis, advised by Professor Ioannis Tsamardinos at the MensXMachina Lab of the Computer Science Department at the University of Crete. This work is funded and part of collaboration between the Insitute of Applied & Computational Mathematics (IACM) at Foundation for Research & Technology Hellas (FORTH) and Huawei Ireland Research Centre.
+This repository contains the LaTeX source code of my MSc Thesis, advised by Professor Ioannis Tsamardinos at the MensXMachina Lab of the Computer Science Department at the University of Crete. This work represents part of collaboration between the Insitute of Applied & Computational Mathematics (IACM) at Foundation for Research & Technology Hellas (FORTH) and Huawei Ireland Research Centre.
 
 We provide a Makefile for compiling the whole document. Run `make`on the root directory to build the code into `thesis.pdf`. Make sure to have `bibtex` and `pdflatex` installed locally.
 
