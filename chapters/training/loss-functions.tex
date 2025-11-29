@@ -42,7 +42,7 @@ showing that the gradient corresponds directly to the difference between predict
 \mathcal{L}_{\text{BCE}}(\mathbb{A}, \hat{\mathbb{A}}) = -\frac{1}{V^2_{\max} \cdot \ell_{\max}}
 \sum_{i,j=1}^{V_{\max}} \sum_{\ell=1}^{\ell_{\max}}
 \left[
-A_{ji}^{(\ell)} \log \hat{\mathbb{A}}_{ji \ell} + (1 - \mathbb{A}_{ji\ell}) \log (1-\hat{\mathbb{A}}_{ji\ell})
+\mathbb{A}_{ji}^{(\ell)} \log \hat{\mathbb{A}}_{ji \ell} + (1 - \mathbb{A}_{ji\ell}) \log (1-\hat{\mathbb{A}}_{ji\ell})
 \right]
 \label{eq:bce-lcm}
 \end{equation}
@@ -64,6 +64,11 @@ This \textit{Correlation Regularization} (CR) term penalizes predicted edges bet
 \end{equation}
 
 where \(\tilde{\mathrm{CC}}(X_j, X_i, \ell)\) denotes the min-max normalized empirical lagged cross-correlation between variables \(X_j\) and \(X_i\) at lag \(\ell\), computed over the observed time-series segment, and \(\epsilon = 10^{-6}\) during normalization ensures numerical stability. The exponent \(3/2\) downweights the penalty for near-zero correlations while preserving smooth gradients for moderately and strongly correlated pairs. In implementation, both the ground truth \(\mathbb{A}\) and the predicted tensor \(\hat{\mathbb{A}}\) are flattened to one-dimensional tensors of length \(V_{\max}^2 \times \ell_{\max}\) before computing the BCE loss. The total loss used for training LCMs thus becomes:
+
+
+where \(\mathrm{CC}(X_j, X_i, \ell)\) denotes the empirical lagged cross-correlation between variables \(X_j\) and \(X_i\) at lag \(\ell\), computed over the observed time-series segment, and \(\epsilon = 10^{-6}\) ensures numerical stability. The exponent \(3/2\) accentuates the penalty for near-zero correlations while preserving smooth gradients for moderately correlated pairs. In implementation, both the ground truth \(\mathbb{A}\) and the predicted tensor \(\hat{\mathbb{A}}\) are flattened to one-dimensional tensors of length \(V_{\max}^2 \times \ell_{\max}\) before computing the BCE loss. The total loss used for training LCMs thus becomes:
+
+
 
 \begin{equation}
 \mathcal{L} = \mathcal{L}_{\text{BCE}} + \lambda_{\text{CR}} \cdot \mathcal{L}_{\text{CR}},
