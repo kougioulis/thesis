@@ -1,0 +1,110 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{graphicx}
+\usepackage{geometry} % for page layout
+\geometry{
+    left=3cm,
+    right=3cm,
+    top=3cm,
+    bottom=3cm
+}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{setspace} % spacing
+\setstretch{1.2}
+\usepackage{enumitem} % lists & formatting
+
+\newcommand{\signature}[3][\small{Nikolaos Kougioulis, \today}]{%
+  \vspace{1cm}
+  \begin{flushright} 
+    \begin{minipage}{8cm}
+      \centering
+      \includegraphics[width=4cm]{sig.png} \\ 
+      \rule{5cm}{1pt} \\
+      #1
+    \end{minipage}
+  \end{flushright}
+}
+
+\begin{document}
+
+\begin{center}
+    {\Large \textbf{Errata}}\\[1cm]
+    {\large Large Causal Models for Temporal Causal Discovery}\\[0.3cm]
+    {\large Nikolaos Kougioulis}\\[0.3cm]
+    {\large \textit{Master of Science Degree in Computer Science and Engineering}} \\[0.3cm]
+    {\large University of Crete, Computer Science Department}
+\end{center}
+\vspace{0.5cm}
+
+The following corrections apply to the thesis version submitted on \textit{November 12, 2025}:
+
+\begin{enumerate}[leftmargin=1.2cm]
+    \item \textbf{Page 53, Line 13:}
+    “(TSCM)“ should be removed.
+
+    \item \textbf{Page 66, Line 24:}
+    “and Oracle“ should read “and (ii) Oracle“.
+
+    \item \textbf{Page 87, Line 5:}
+    Replace \(\hat{\mathbb{A}}_{ij\tau}\) with \(\hat{\mathbb{A}}_{ji\tau}\).
+
+    \item \textbf{Page 97, Equation (5.6):}
+    Replace \(A_{ij}^{(\ell)}\) with \(\mathbb{A}_{ji}^{(\ell)}\).
+    
+    \item \textbf{Page 98, Line 7:}
+    Replace “following“ with “motivated by“.
+
+    \item \textbf{Page 98, Equation (5.7):} Replace {\small
+      \(
+      \sum_{i,j=1}^{V_{\max}} 
+      \sum_{\ell=1}^{\ell_{\max}}
+      \frac{\hat{\mathbb{A}}_{ji\ell}}
+      {\left(|\mathrm{CC}(X_j, X_i, \ell)| + \epsilon\right)^{3/2}}
+      \)
+      } with
+      {\small
+      \[
+      \frac{1}{V_{\max}^{2}\,\ell_{\max}}
+      \sum_{i,j=1}^{V_{\max}} 
+      \sum_{\ell=1}^{\ell_{\max}}
+      \bigl(\hat{\mathbb{A}}_{ji\ell}-\tilde{\mathrm{CC}}(X_j,X_i,\ell)\bigr)^{2}
+      \,\bigl|\tilde{\mathrm{CC}}(X_j,X_i,\ell)\bigr|^{3/2}.
+      \]
+      }
+
+    \item \textbf{Page 98, Line 10:}
+    Replace \(\mathrm{CC}(X_j, X_i, \ell)\) with \(\tilde{\mathrm{CC}}(X_j, X_i, \ell)\). \newline{}
+    Replace “denotes the“ with “denotes the min-max normalized“.
+
+    \item \textbf{Page 98, Line 12:}
+    Replace “ensures numerical stability“ with “during normalization ensures numerical stability“. \newline{}
+    Replace “accentuates“ with “downweights“.
+
+    \item \textbf{Page 107, Line 4:}
+    “edges“ should read “causal paths/edges“.
+
+    \item \textbf{Page 124, Line 14:}
+    Replace “, suggesting“ with “suggest“.
+
+    \item \textbf{Page 141, Line 12:}
+     “tresholded“ should read “thresholded“. “\textit{tau}“ should read “\(\tau\)“.
+
+    \item \textbf{Page 141, Figure D.1 caption:}
+    Replace \(\hat{\mathbb{A}_{i,j,\ell}}\) with \(\hat{\mathbb{A}}_{j,i,\ell}\). \newline{}
+    After  “...example”, add  “against the ground truth.”.
+
+\end{enumerate}
+
+\vfill
+
+% place for signature
+\signature
+
+\noindent\rule{\textwidth}{0.4pt}
+
+\noindent \textit{This errata sheet accompanies the submitted thesis and documents corrections to the final printed version.}
+
+\end{document}
