@@ -1,7 +1,10 @@
 [![CC BY 4.0][cc-by-shield]][cc-by]
+[![e-Locus Shield][locus-shield]][locus-link]
 
 [cc-by]: http://creativecommons.org/licenses/by/4.0/
 [cc-by-shield]: https://img.shields.io/badge/License-CC%20BY%204.0-lightgrey.svg
+[locus-shield]: https://img.shields.io/badge/e--Locus-%239D2235?style=flat&color=%239D2235
+[locus-link]: https://elocus.lib.uoc.gr/dlib/1/d/9/metadata-dlib-1764761882-792089-25440.tkl
 
 ## Summary
 
