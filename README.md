@@ -14,6 +14,35 @@ This repository contains the LaTeX source of my MSc Thesis, advised by Professor
 
 Causal discovery for both cross-sectional and temporal data has traditionally followed a dataset-specific paradigm, where a new model is fitted for each individual dataset. Such an approach underutilizes the potential of multi-dataset and large-scale pretraining, especially given recent advances in foundation models. The concept of *Large Causal Models (LCMs)* envisions a class of pre-trained neural architectures specifically designed for temporal causal discovery. Existing approaches remain largely proofs of concept, typically constrained to small input sizes (e.g., five variables), with performance degrading rapidly to random guessing as the number of variables or model parameters increases. Moreover, current methods rely heavily on synthetic data, generated under arbitrary assumptions, which substantially limits their ability to generalize to realistic or out-of-distribution samples. This work addresses these challenges through novel methods for training on mixtures of synthetic and realistic data collections, enabling both higher input dimensionality and deeper architectures without loss of performance. Extensive experiments demonstrate that LCMs achieve competitive or superior performance compared to classical causal discovery algorithms, while maintaining robustness across diverse domains, especially on non-synthetic data cases. Our findings also highlight promising directions towards integrating interventional samples and domain knowledge, further advancing the development of foundation models for causal discovery.
 
+## TLDR
+
+Contributions of this dissertation can be summarized as follows:
+
+- Introduced a family of pre-trained neural architectures (*Large Causal Models - LCMs*) capable of performing causal discovery on time-series data, scaling to significantly larger numbers of variables than prior work, without degradation in performance compared to prior work.
+
+- Developed a pipeline for *generating synthetic data of high fidelity* (time-series samples derived from a ground truth temporal SCM).
+
+- Introduced a *novel AutoML-based generative method (Temporal Causal-based Simulation - TCS) for creating realistic (simulated) causal models and data samples from real, multivariate time-series*.
+
+- Proposed an *adversarial discriminator methodology using Classifier 2-Sample Tests - C2STs (Adversarial Causal Tuning - ACT)* to select *optimal causal models from TCS* and avoid selection of degenerate, fully-connected graps (sparsity penalty).
+
+- Generated *hundreds of thousands of training pairs* from mixtures of synthetic and simulated datasets, enabling robust multi-domain pretraining of LCMs
+
+- Showcased that *training of causal foundation models benefits from a mixture of both synthetic and realistic data*, as illustrated in foundation models for time-series forecasting. Identified the optimal ratio for this mixture, which improves generalization to semi-synthetic and realistic benchmarks.
+
+- *Proposed a lagged-correlation-informed regularization technique* that stabilizes training and suppresses low-support edges in predicted causal graphs, motivated by prior work, and showcased that the *use of observed statistics (training aids) during both training and inference of causal foundation models improves performance*.
+
+- Designed a novel transformer-based model using *patch embeddings, variable embeddings, and multi-head temporal–spatial attention for improved expressivity* and generalization (preliminary experiments).
+
+- Proposed promising approaches for incorporating interventional data in foundation models for causal discovery (preliminary experiments).
+
+- Designed promising mechanisms for *representation and training to integrate prior domain knowledge*, as a soft auxiliary task (preliminary experiments).
+
+- *Compared LCMs against well-known causal discovery methods* (e.g., PCMCI, DYNOTEARS) and demonstrated *competitive or superior performance* across synthetic, semi-synthetic and realistic datasets, maintaining robustness under domain shifts and distributions outside the training set; one of the first results for causal foundation models in temporal data.
+
+- Achieved *significantly faster inference time* than existing non-foundation temporal causal discovery algorithms.
+
+
 ## Building
 
 We provide a Makefile for compiling the whole document. Run `make` on the root directory to build the code into `thesis.pdf`. Make sure to have `bibtex` and `pdflatex` installed locally. Errata for the submitted text (hardcover) are also provided and can be built separately by running `make errata`. Running `make cleanall` deletes temporary and auxiliary files as well as `.pdf` documents.
