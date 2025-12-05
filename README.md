@@ -36,11 +36,11 @@ Contributions of this dissertation can be summarized as follows:
 
 - Achieved *significantly faster inference time* than existing non-foundation temporal causal discovery algorithms.
 
-- Designed a novel transformer-based model using *patch embeddings, variable embeddings, and multi-head temporal–spatial attention for improved expressivity* and generalization <u>(preliminary experiments)</u>.
+- Designed a novel transformer-based model using *patch embeddings, variable embeddings, and multi-head temporal–spatial attention for improved expressivity* and generalization *(preliminary experiments)*.
 
-- Proposed promising approaches for incorporating interventional data in foundation models for causal discovery <u>(preliminary experiments)</u>.
+- Proposed promising approaches for incorporating interventional data in foundation models for causal discovery *(preliminary experiments)*.
 
-- Designed promising mechanisms for *representation and training to integrate prior domain knowledge*, as a soft auxiliary task <u>(preliminary experiments)</u>.
+- Designed promising mechanisms for *representation and training to integrate prior domain knowledge*, as a soft auxiliary task *(preliminary experiments)*.
 
 
 ## Building
