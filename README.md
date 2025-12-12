@@ -8,7 +8,7 @@
 
 ## Summary
 
-This repository contains the LaTeX source of my MSc Thesis, advised by Professor Ioannis Tsamardinos at the MensXMachina Lab of the Computer Science Department at the University of Crete. The examination committee consisted of Ioannis Tsamardinos (advisor), Sofia Triantafillou, and Grigoris Tsagkatakis. This work represents part of collaboration between the Insitute of Applied & Computational Mathematics (IACM) at Foundation for Research & Technology Hellas (FORTH) and Huawei Ireland Research Centre.
+This repository contains the LaTeX source of my MSc Thesis, advised by Professor Ioannis Tsamardinos at the MensXMachina Lab of the Computer Science Department at the University of Crete. The examination committee consisted of [Ioannis Tsamardinos](https://scholar.google.gr/citations?user=7fendUwAAAAJ&hl) (advisor), [Sofia Triantafillou](https://scholar.google.gr/citations?user=n6-8SZ4AAAAJ&hl=en), and [Grigoris Tsagkatakis](https://scholar.google.gr/citations?hl=en&user=VEmEfrMAAAAJ). This work represents part of collaboration between the Insitute of Applied & Computational Mathematics (IACM) at [Foundation for Research & Technology Hellas (FORTH)](https://forth.gr/en/home/) and [Huawei Ireland Research Centre](https://www.huawei.com/ie/).
 
 ## Building
 
