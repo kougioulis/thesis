@@ -26,9 +26,9 @@ Contributions of this dissertation can be summarized as follows:
 
 - Developed a pipeline for **generating synthetic data of high fidelity** (time-series samples derived from a ground truth temporal SCM).
 
-- Introduced a **novel AutoML-based generative method (Temporal Causal-based Simulation - TCS) for creating realistic (simulated) causal models and data samples from real, multivariate time-series**.
+- Introduced a *novel generative method* **(Temporal Causal-based Simulation - TCS)** for creating realistic (simulated) causal models and data samples from real, multivariate time-series**.
 
-- Proposed an **adversarial discriminator methodology using Classifier 2-Sample Tests - C2STs (Adversarial Causal Tuning - ACT)** for *optimal causal model selection from TCS** and avoid selection of degenerate, fully-connected graps **(sparsity penalty)**.
+- Proposed an *adversarial discriminator methodology using Classifier 2-Sample Tests - C2STs* **(Adversarial Causal Tuning - ACT)** for *optimal causal model selection** and avoid selection of degenerate, fully-connected graps **(sparsity penalty)**.
 
 - Generated **hundreds of thousands of training pairs** from mixtures of synthetic and simulated datasets, enabling robust multi-domain pretraining of LCMs
 
