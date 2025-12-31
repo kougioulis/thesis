@@ -42,13 +42,13 @@ If this work has proven useful, please consider citing:
 
 ```bibtex
 @mastersthesis{kougioulis2025large,
-	title        = {Large Causal Models for Temporal Causal Discovery},
-	author       = {Nikolaos Kougioulis},
-	year         = 2025,
-	month        = 11,
-	address      = {Heraklion, Greece},
-	url          = {https://elocus.lib.uoc.gr/dlib/1/d/9/metadata-dlib-1764761882-792089-25440.tkl},
-	note         = {Available at the University of Crete e-repository},
-	school       = {Department of Computer Science, University of Crete},
-	type         = {Master's Thesis}
+  title   = {Large Causal Models for Temporal Causal Discovery},
+  author  = {Kougioulis, Nikolaos},
+  year    = {2025},
+  month   = {nov},
+  address = {Heraklion, Greece},
+  url     = {https://elocus.lib.uoc.gr/dlib/1/d/9/metadata-dlib-1764761882-792089-25440.tkl},
+  note    = {Available at the University of Crete e-repository},
+  school  = {Department of Computer Science, University of Crete},
+  type    = {Master's Thesis}
 }
